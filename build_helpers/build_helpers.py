@@ -4,6 +4,7 @@ import errno
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import List, Optional
 
@@ -188,6 +189,6 @@ def run_antlr(cmd: Command) -> None:
             msg = f"| Unable to generate parsers: {e} |"
             msg = "=" * len(msg) + "\n" + msg + "\n" + "=" * len(msg)
             cmd.announce(f"{msg}", level=distutils.log.FATAL)
-            exit(1)
+            sys.exit(1)
         else:
             raise
