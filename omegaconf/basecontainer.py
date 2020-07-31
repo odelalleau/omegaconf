@@ -311,7 +311,9 @@ class BaseContainer(Container, ABC):
 
     def merge_with(
         self,
-        *others: Union["BaseContainer", Dict[str, Any], List[Any], Tuple[Any], Any],
+        *others: Union[
+            "BaseContainer", Dict[str, Any], List[Any], Tuple[Any, ...], Any
+        ],
     ) -> None:
         try:
             self._merge_with(*others)
@@ -320,7 +322,9 @@ class BaseContainer(Container, ABC):
 
     def _merge_with(
         self,
-        *others: Union["BaseContainer", Dict[str, Any], List[Any], Tuple[Any], Any],
+        *others: Union[
+            "BaseContainer", Dict[str, Any], List[Any], Tuple[Any, ...], Any
+        ],
     ) -> None:
         from .dictconfig import DictConfig
         from .listconfig import ListConfig
