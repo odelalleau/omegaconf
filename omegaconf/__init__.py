@@ -1,7 +1,7 @@
 from .base import Container, Node
 from .dictconfig import DictConfig
 from .errors import (
-    InterpolationParseError,
+    InterpolationSyntaxError,
     KeyValidationError,
     MissingMandatoryValue,
     ReadonlyConfigError,
@@ -37,7 +37,7 @@ __all__ = [
     "ReadonlyConfigError",
     "UnsupportedValueType",
     "KeyValidationError",
-    "InterpolationParseError",
+    "InterpolationSyntaxError",
     "Container",
     "ListConfig",
     "DictConfig",

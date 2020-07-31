@@ -4,7 +4,7 @@ import re
 import string
 import sys
 from enum import Enum
-from typing import Any, Dict, List, Match, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import yaml
 
@@ -12,10 +12,13 @@ from .errors import (
     ConfigIndexError,
     ConfigTypeError,
     ConfigValueError,
+    InterpolationSyntaxError,
     KeyValidationError,
     OmegaConfBaseException,
     ValidationError,
 )
+from .grammar.gen.InterpolationParser import InterpolationParser
+from .interpolation_parser import parse
 
 try:
     import dataclasses
@@ -309,37 +312,42 @@ class ValueKind(Enum):
     VALUE = 0
     MANDATORY_MISSING = 1
     INTERPOLATION = 2
-    STR_INTERPOLATION = 3
 
 
-def get_value_kind(value: Any, return_match_list: bool = False) -> Any:
+def get_value_kind(value: Any, return_parse_info: bool = False) -> Any:
     """
     Determine the kind of a value
     Examples:
+    VALUE : "10", "20", True
     MANDATORY_MISSING : "???"
-    VALUE : "10", "20", True,
-    INTERPOLATION: "${foo}", "${foo.bar}"
-    STR_INTERPOLATION: "ftp://${host}/path", "${foo.${bar}}"
+    INTERPOLATION: "${foo.bar}", "${foo.${bar}}", "${foo:bar}", "[${foo}, ${bar}]",
+                   "ftp://${host}/path", "${foo:${bar}, true, {'baz': ${baz}}}"
 
-    Note in particular that in the current implementation, "${foo.${bar}}" is
-    identified as a string interpolation (`STR_INTERPOLATION`) while it is
-    actually a (nested) simple interpolation. This discrepancy w.r.t naming
-    conventions will be addressed in a future update.
-
-    :param value: input string to classify
-    :param return_match_list: True to return the match list as well
-    :return: ValueKind
+    :param value: Input to classify.
+    :param return_parse_info: True to also return interpolation parse trees as well as
+        locations of quoted strings (note that there may be more than one tree in case
+        of multiple top-level interpolations, as in "I have a dog named ${dog}, and a
+        cat named ${cat}").
+    :return: ValueKind (and optionally the associated interpolation parse trees and
+        locations of quoted strings).
     """
 
-    key_prefix = r"\${(\w+:)?"
-    legal_characters = r"([\w\.%_ \\/:,-]*?)}"
-    match_list: Optional[List[Match[str]]] = None
+    # See `_extract_top_level_interpolations_and_quotes()` below for what `parse_info` is.
+    parse_info: List[
+        Tuple[int, int, bool, Optional[InterpolationParser.RootContext]]
+    ] = []
 
     def ret(
         value_kind: ValueKind,
-    ) -> Union[ValueKind, Tuple[ValueKind, Optional[List[Match[str]]]]]:
-        if return_match_list:
-            return value_kind, match_list
+    ) -> Union[
+        ValueKind,
+        Tuple[
+            ValueKind,
+            List[Tuple[int, int, bool, Optional[InterpolationParser.RootContext]]],
+        ],
+    ]:
+        if return_parse_info:
+            return value_kind, parse_info
         else:
             return value_kind
 
@@ -353,17 +361,82 @@ def get_value_kind(value: Any, return_match_list: bool = False) -> Any:
     if value == "???":
         return ret(ValueKind.MANDATORY_MISSING)
 
-    if not isinstance(value, str):
+    if not isinstance(value, str) or "${" not in value:
         return ret(ValueKind.VALUE)
 
-    match_list = list(re.finditer(key_prefix + legal_characters, value))
-    if len(match_list) == 0:
-        return ret(ValueKind.VALUE)
+    parse_info = _extract_top_level_interpolations_and_quotes(
+        value, parse_interpolations=return_parse_info
+    )
 
-    if len(match_list) == 1 and value == match_list[0].group(0):
-        return ret(ValueKind.INTERPOLATION)
-    else:
-        return ret(ValueKind.STR_INTERPOLATION)
+    # Note: a quoted string `"${a}"` (with quotes included in the string) is still
+    # considered an interpolation because we need to remove the quotes, which will
+    # be done within `_resolve_complex_interpolation()`. If we returned
+    # `ValueKind.VALUE` for such a string, then the quotes would not be removed.
+
+    return ret(ValueKind.INTERPOLATION)
+
+
+def _extract_top_level_interpolations_and_quotes(
+    value: str, parse_interpolations: bool = False,
+) -> List[Tuple[int, int, bool, Optional[InterpolationParser.RootContext]]]:
+    """
+    Scan the input string to identify the interpolation parts.
+
+    :return: A list of tuples (start, stop, is_interpolation, tree) indicating
+        boundaries of:
+        - interpolations (when `is_interpolation` is True), with `tree` being their
+          parse tree when `parse_interpolations` is True (None otherwise)
+        - quoted strings (when `is_interpolation` is False), with `tree` set to None
+    """
+    current_quote_start_idx = current_quote_ch = current_quote_is_top_level = None
+    prev = None
+    interpolation_start = None
+    count_braces = 0
+    parse_info: List[
+        Tuple[int, int, bool, Optional[InterpolationParser.RootContext]]
+    ] = []
+
+    for idx, ch in enumerate(value):
+        if ch in ('"', "'") and prev != "\\":  # unescaped quote
+            if current_quote_ch == ch:  # exiting quote
+                assert current_quote_start_idx is not None
+                if current_quote_is_top_level:
+                    parse_info.append((current_quote_start_idx, idx, False, None))
+                current_quote_ch = current_quote_start_idx = None
+            elif current_quote_ch is None:  # entering quote
+                current_quote_ch = ch
+                current_quote_start_idx = idx
+                current_quote_is_top_level = interpolation_start is None
+        elif current_quote_ch is not None:
+            pass  # skip until end of quote
+        elif ch == "{":
+            if interpolation_start is None and prev == "$":
+                interpolation_start = idx - 1  # new top-level interpolation
+                assert count_braces == 0
+            elif interpolation_start is not None:
+                # Keep track of braces so as to be able to identify the interpolation end.
+                count_braces += 1
+        elif ch == "}" and interpolation_start is not None:
+            if count_braces == 0:
+                tree = (
+                    parse(value[interpolation_start : idx + 1])
+                    if parse_interpolations
+                    else None
+                )
+                parse_info.append((interpolation_start, idx, True, tree))
+                interpolation_start = None
+            else:
+                count_braces -= 1
+        prev = ch
+
+    if (
+        count_braces != 0
+        or interpolation_start is not None
+        or current_quote_ch is not None
+    ):
+        raise InterpolationSyntaxError("maybe non-matching braces or quotes?")
+
+    return parse_info
 
 
 def is_bool(st: str) -> bool:
@@ -511,12 +584,7 @@ def is_primitive_type(type_: Any) -> bool:
 
 def _is_interpolation(v: Any) -> bool:
     if isinstance(v, str):
-        ret = get_value_kind(v) in (
-            ValueKind.INTERPOLATION,
-            ValueKind.STR_INTERPOLATION,
-        )
-        assert isinstance(ret, bool)
-        return ret
+        return bool(get_value_kind(v) == ValueKind.INTERPOLATION)
     return False
 
 

@@ -3,7 +3,6 @@ import copy
 import io
 import os
 import pathlib
-import re
 import sys
 from collections import defaultdict
 from contextlib import contextmanager
@@ -15,7 +14,6 @@ from typing import (
     Dict,
     Generator,
     List,
-    Match,
     Optional,
     Tuple,
     Type,
@@ -96,17 +94,17 @@ class Resolver0(Protocol):
 
 
 class Resolver1(Protocol):
-    def __call__(self, __x1: str) -> Any:
+    def __call__(self, __x1: Any) -> Any:
         ...
 
 
 class Resolver2(Protocol):
-    def __call__(self, __x1: str, __x2: str) -> Any:
+    def __call__(self, __x1: Any, __x2: Any) -> Any:
         ...
 
 
 class Resolver3(Protocol):
-    def __call__(self, __x1: str, __x2: str, __x3: str) -> Any:
+    def __call__(self, __x1: Any, __x2: Any, __x3: Any) -> Any:
         ...
 
 
@@ -322,20 +320,6 @@ class OmegaConf:
         return target
 
     @staticmethod
-    def _tokenize_args(string: Optional[str]) -> List[str]:
-        if string is None or string == "":
-            return []
-
-        def _unescape_word_boundary(match: Match[str]) -> str:
-            if match.start() == 0 or match.end() == len(match.string):
-                return ""
-            return match.group(0)
-
-        escaped = re.split(r"(?<!\\),", string)
-        escaped = [re.sub(r"(?<!\\) ", _unescape_word_boundary, x) for x in escaped]
-        return [re.sub(r"(\\([ ,]))", lambda x: x.group(2), x) for x in escaped]
-
-    @staticmethod
     def register_resolver(name: str, resolver: Resolver) -> None:
         assert callable(resolver), "resolver must be callable"
         # noinspection PyProtectedMember
@@ -343,12 +327,15 @@ class OmegaConf:
             name not in BaseContainer._resolvers
         ), "resolved {} is already registered".format(name)
 
-        def caching(config: BaseContainer, key: str) -> Any:
+        def caching(config: BaseContainer, key: Tuple[Any, ...]) -> Any:
             cache = OmegaConf.get_cache(config)[name]
-            val = (
-                cache[key] if key in cache else resolver(*OmegaConf._tokenize_args(key))
-            )
-            cache[key] = val
+            try:
+                val = cache[key]
+            except KeyError:
+                val = cache[key] = resolver(*key)
+            except TypeError:
+                # Unhashable key: cannot cache.
+                val = resolver(*key)
             return val
 
         # noinspection PyProtectedMember

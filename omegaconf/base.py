@@ -2,15 +2,13 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Iterator, Optional, Tuple, Type, Union
+from functools import partial
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Type, Union
 
-from ._utils import ValueKind, _get_value, format_and_raise, get_value_kind
-from .errors import (
-    ConfigKeyError,
-    InterpolationParseError,
-    MissingMandatoryValue,
-    UnsupportedInterpolationType,
-)
+from ._utils import ValueKind, format_and_raise, get_value_kind
+from .errors import ConfigKeyError, MissingMandatoryValue, UnsupportedInterpolationType
+from .grammar.gen.InterpolationParser import InterpolationParser
+from .interpolation_parser import ResolveInterpolationVisitor
 
 
 @dataclass
@@ -124,42 +122,19 @@ class Node(ABC):
     def _dereference_node(
         self, throw_on_missing: bool = False, throw_on_resolution_failure: bool = True
     ) -> Optional["Node"]:
-        from .nodes import StringNode
-
         if self._is_interpolation():
-            value_kind, match_list = get_value_kind(
-                value=self._value(), return_match_list=True
-            )
-            match = match_list[0]
             parent = self._get_parent()
+            assert parent is not None
             key = self._key()
-            if value_kind == ValueKind.INTERPOLATION:
-                assert parent is not None
-                v = parent._resolve_simple_interpolation(
-                    key=key,
-                    inter_type=match.group(1),
-                    inter_key=match.group(2),
-                    throw_on_missing=throw_on_missing,
-                    throw_on_resolution_failure=throw_on_resolution_failure,
-                )
-                return v
-            elif value_kind == ValueKind.STR_INTERPOLATION:
-                assert parent is not None
-                ret = parent._resolve_interpolation(
-                    key=key,
-                    value=self,
-                    throw_on_missing=throw_on_missing,
-                    throw_on_resolution_failure=throw_on_resolution_failure,
-                )
-                if ret is None:
-                    return ret
-                return StringNode(
-                    value=ret,
-                    key=key,
-                    parent=parent,
-                    is_optional=self._metadata.optional,
-                )
-            assert False
+            rval = parent._resolve_interpolation(
+                parent=parent,
+                key=key,
+                value=self,
+                throw_on_missing=throw_on_missing,
+                throw_on_resolution_failure=throw_on_resolution_failure,
+            )
+            assert rval is None or isinstance(rval, Node)
+            return rval
         else:
             # not interpolation, compare directly
             if throw_on_missing:
@@ -302,6 +277,7 @@ class Container(Node):
         if value is None:
             return root, last_key, value
         value = root._resolve_interpolation(
+            parent=root,
             key=last_key,
             value=value,
             throw_on_missing=False,
@@ -309,11 +285,74 @@ class Container(Node):
         )
         return root, last_key, value
 
+    def _resolve_complex_interpolation(
+        self,
+        parent: Optional["Container"],
+        value: "Node",
+        key: Any,
+        parse_info: List[
+            Tuple[int, int, bool, Optional[InterpolationParser.RootContext]]
+        ],
+        throw_on_missing: bool,
+        throw_on_resolution_failure: bool,
+    ) -> Optional["Node"]:
+        """
+        A "complex" interpolation is any interpolation that cannot be handled by
+        `_resolve_simple_interpolation()`, i.e. that either contains nested
+        interpolations or is not a single "${..}" block.
+        """
+
+        from .nodes import StringNode
+
+        has_interpolation = any(
+            is_interpolation for _, _, is_interpolation, _ in parse_info
+        )
+        resolve_func = partial(
+            self._resolve_simple_interpolation,
+            key=key,
+            throw_on_missing=throw_on_missing,
+            throw_on_resolution_failure=throw_on_resolution_failure,
+        )
+        value_str = value._value()
+        assert isinstance(value_str, str), (type(value_str), value_str)
+        # Resolve all interpolations sequentially and concatenate the results (unless
+        # there is a single interpolation spanning the whole string, in which case we
+        # keep the single result as is).
+        visitor = ResolveInterpolationVisitor(resolve_func=resolve_func)
+        last_end = -1
+        results: List[Union[str, Optional[Node]]] = []
+        for start, end, is_interpolation, tree in parse_info:
+            assert end < len(value_str)
+            if start > last_end + 1:
+                results.append(value_str[last_end + 1 : start])
+            if is_interpolation:
+                # This is an interpolation: resolve it.
+                assert tree is not None
+                results.append(visitor.visit(tree))
+            else:
+                # This is a quoted string: get rid of the quotes.
+                results.append(value_str[start + 1 : end])
+            last_end = end
+        if last_end < len(value_str) - 1:
+            # Add the rest of the string after last interpolation.
+            results.append(value_str[last_end + 1 :])
+        if len(results) == 1 and has_interpolation:
+            rval = results[0]
+        else:
+            rval = StringNode(
+                value="".join(map(str, results)),
+                key=key,
+                parent=parent,
+                is_optional=value._metadata.optional,
+            )
+        assert rval is None or isinstance(rval, Node)
+        return rval
+
     def _resolve_simple_interpolation(
         self,
         key: Any,
         inter_type: str,
-        inter_key: str,
+        inter_key: Tuple[Any],
         throw_on_missing: bool,
         throw_on_resolution_failure: bool,
     ) -> Optional["Node"]:
@@ -325,8 +364,9 @@ class Container(Node):
 
         inter_type = ("str:" if inter_type is None else inter_type)[0:-1]
         if inter_type == "str":
+            assert len(inter_key) == 1 and isinstance(inter_key[0], str)
             parent, last_key, value = root_node._select_impl(
-                inter_key,
+                inter_key[0],
                 throw_on_missing=throw_on_missing,
                 throw_on_resolution_failure=throw_on_resolution_failure,
             )
@@ -335,7 +375,7 @@ class Container(Node):
             if parent is None or value is None:
                 if throw_on_resolution_failure:
                     raise ConfigKeyError(
-                        f"{inter_type} interpolation key '{inter_key}' not found"
+                        f"{inter_type} interpolation key '{inter_key[0]}' not found"
                     )
                 else:
                     return None
@@ -366,146 +406,25 @@ class Container(Node):
 
     def _resolve_interpolation(
         self,
+        parent: Optional["Container"],
         key: Any,
         value: "Node",
         throw_on_missing: bool,
         throw_on_resolution_failure: bool,
     ) -> Any:
+        value_kind, parse_info = get_value_kind(value=value, return_parse_info=True)
 
-        value_kind, match_list = get_value_kind(value=value, return_match_list=True)
-        if value_kind not in (ValueKind.INTERPOLATION, ValueKind.STR_INTERPOLATION):
+        if value_kind != ValueKind.INTERPOLATION:
             return value
 
-        if value_kind == ValueKind.INTERPOLATION:
-            # simple interpolation, inherit type
-            match = match_list[0]
-            return self._resolve_simple_interpolation(
-                key=key,
-                inter_type=match.group(1),
-                inter_key=match.group(2),
-                throw_on_missing=throw_on_missing,
-                throw_on_resolution_failure=throw_on_resolution_failure,
-            )
-        elif value_kind == ValueKind.STR_INTERPOLATION:
-            value = _get_value(value)
-            assert isinstance(value, str)
-            try:
-                # Note: `match_list` is ignored here as complex interpolations may be
-                # nested, the string will be re-parsed within `_evaluate_complex()`.
-                return self._evaluate_complex(
-                    value,
-                    key=key,
-                    throw_on_missing=throw_on_missing,
-                    throw_on_resolution_failure=throw_on_resolution_failure,
-                )
-            except InterpolationParseError as e:
-                if throw_on_resolution_failure:
-                    self._format_and_raise(key=key, value=value, cause=e)
-                return None
-        else:
-            assert False
-
-    def _evaluate_simple(
-        self,
-        value: str,
-        key: Any,
-        throw_on_missing: bool,
-        throw_on_resolution_failure: bool,
-    ) -> Optional["Node"]:
-        """Evaluate a simple interpolation"""
-        value_kind, match_list = get_value_kind(value=value, return_match_list=True)
-        if value_kind == ValueKind.VALUE:
-            from .nodes import StringNode
-
-            # False positive, this is not an interpolation after all! This may happen
-            # with strings like "${foo:abc=def}" that are not valid interpolations per
-            # current parsing rules in `get_value_kind()`.
-            return StringNode(key=key, value=value)
-        assert value_kind == ValueKind.INTERPOLATION and len(match_list) == 1, (
-            value,
-            value_kind,
-            match_list,
-        )
-        match = match_list[0]
-        return self._resolve_simple_interpolation(
-            inter_type=match.group(1),
-            inter_key=match.group(2),
+        return self._resolve_complex_interpolation(
+            parent=parent,
+            value=value,
             key=key,
+            parse_info=parse_info,
             throw_on_missing=throw_on_missing,
             throw_on_resolution_failure=throw_on_resolution_failure,
         )
-
-    def _evaluate_complex(
-        self,
-        value: str,
-        key: Any,
-        throw_on_missing: bool,
-        throw_on_resolution_failure: bool,
-    ) -> Optional["Node"]:
-        """
-        Evaluate a complex interpolation.
-
-        A complex interpolation is more elaborate than "${a}" or "${a:b,c}", e.g.:
-            "Sentence: ${subject} {verb} ${object}" (string interpolation)
-            "${plus:${x},${y}} (calling a custom resolver on config variables)
-            "${${op}:${x},${y}} (same as previous but with a dynamic resolver)
-            "${${a}}" (fetching the key whose name is stored in `a`)
-
-        The high-level logic consists in scanning the input string `value` from
-        left to right, keeping track of the tokens signaling the opening and closing
-        of each interpolation in the string. Whenever an interpolation is closed we
-        evaluate it and replace its definition with the result of this evaluation.
-
-        As an example, consider the string `value` set to "${foo.${bar}}":
-            1. We initialize our result with the original string: "${foo.${bar}}"
-            2. Scanning `value` from left to right, the first interpolation to be
-               closed is "${bar}". We evaluate it: if it resolves to "baz", we update
-               the result string to "${foo.baz}".
-            3. The next interpolation to be closed is now "${foo.baz}". We evaluate it:
-               if it resolves to "abc", we update the result accordingly to "abc".
-            4. We are done scanning `value` => the final result is "abc".
-        """
-        from .nodes import StringNode
-
-        to_eval = []  # list of ongoing interpolations to be evaluated
-        # `result` will be updated iteratively from `value` to final result.
-        result = value
-        total_offset = 0  # keep track of offset between indices in `result` vs `value`
-        for idx, ch in enumerate(value):
-            if value[idx : idx + 2] == "${":
-                # New interpolation starting.
-                to_eval.append(InterpolationRange(start=idx - total_offset))
-            elif ch == "}":
-                # Current interpolation is ending.
-                if not to_eval:
-                    # This can happen if someone uses braces in their strings, which
-                    # we should still allow (ex: "I_like_braces_{}_and_${liked}").
-                    continue
-                inter = to_eval.pop()
-                inter.stop = idx + 1 - total_offset
-                # Evaluate this interpolation.
-                val = self._evaluate_simple(
-                    value=result[inter.start : inter.stop],
-                    key=key,
-                    throw_on_missing=throw_on_missing,
-                    throw_on_resolution_failure=throw_on_resolution_failure,
-                )
-                _cond_parse_error(val is not None, "unexpected error during parsing")
-                # If this interpolation covers the whole expression we are evaluating,
-                # then `val` is our final result. We should *not* cast it to string!
-                if inter.start == 0 and idx == len(value) - 1:
-                    return val
-                # Update `result` with the evaluation of the interpolation.
-                val_str = str(val)
-                result = "".join(
-                    [result[0 : inter.start], val_str, result[inter.stop :]]
-                )
-                # Update offset based on difference between the length of the definition
-                # of the interpolation vs the length of its evaluation.
-                offset = inter.stop - inter.start - len(val_str)
-                total_offset += offset
-        _cond_parse_error(not to_eval, "syntax error - maybe no matching braces?")
-        return StringNode(value=result, key=key)
 
     def _re_parent(self) -> None:
         from .dictconfig import DictConfig
@@ -530,14 +449,3 @@ class Container(Node):
                             item._set_parent(self)
                         if isinstance(item, Container):
                             item._re_parent()
-
-
-def _cond_parse_error(condition: Any, msg: str = "") -> None:
-    """
-    Raise an `InterpolationParseError` if `condition` evaluates to `False`.
-
-    `msg` is an optional message that may give additional information about
-    the error.
-    """
-    if not condition:
-        raise InterpolationParseError(msg)

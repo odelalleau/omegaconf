@@ -107,5 +107,25 @@ class ConfigValueError(OmegaConfBaseException, ValueError):
 
 class InterpolationParseError(OmegaConfBaseException):
     """
-    Thrown when unable to parse a complex interpolation.
+    Base class for interpolation parsing errors.
     """
+
+
+# The four parsing error classes below correspond to the four different kinds
+# of errors that may be reported by `antlr`.
+
+
+class InterpolationSyntaxError(InterpolationParseError):
+    pass
+
+
+class InterpolationAmbiguityError(InterpolationParseError):
+    pass
+
+
+class InterpolationAttemptingFullContextError(InterpolationParseError):
+    pass
+
+
+class InterpolationContextSensitivityError(InterpolationParseError):
+    pass

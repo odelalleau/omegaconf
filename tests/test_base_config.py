@@ -1,7 +1,7 @@
 import copy
 import sys
 from enum import Enum
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, Union
 
 import pytest
 from pytest import raises
@@ -426,26 +426,6 @@ def test_read_write_override(src: Any, func: Any, expectation: Any) -> None:
 
 
 @pytest.mark.parametrize(  # type: ignore
-    "string, tokenized",
-    [
-        ("dog,cat", ["dog", "cat"]),
-        ("dog\\,cat\\ ", ["dog,cat "]),
-        ("dog,\\ cat", ["dog", " cat"]),
-        ("\\ ,cat", [" ", "cat"]),
-        ("dog, cat", ["dog", "cat"]),
-        ("dog, ca t", ["dog", "ca t"]),
-        ("dog, cat", ["dog", "cat"]),
-        ("whitespace\\ , before comma", ["whitespace ", "before comma"]),
-        (None, []),
-        ("", []),
-        ("no , escape", ["no", "escape"]),
-    ],
-)
-def test_tokenize_with_escapes(string: str, tokenized: List[str]) -> None:
-    assert OmegaConf._tokenize_args(string) == tokenized
-
-
-@pytest.mark.parametrize(  # type: ignore
     "src, func, expectation",
     [({}, lambda c: c.__setattr__("foo", 1), raises(AttributeError))],
 )
@@ -553,6 +533,7 @@ def test_resolve_str_interpolation(query: str, result: Any) -> None:
     cfg = OmegaConf.create({"foo": 10, "bar": "${foo}"})
     assert (
         cfg._resolve_interpolation(
+            parent=None,
             key=None,
             value=StringNode(value=query),
             throw_on_missing=False,
