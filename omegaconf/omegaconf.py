@@ -112,12 +112,12 @@ Resolver = Union[Resolver0, Resolver1, Resolver2, Resolver3]
 
 
 def register_default_resolvers() -> None:
-    def env(key: str, default: Optional[str] = None) -> Any:
+    def env(key: str, default: Optional[Any] = None) -> Any:
         try:
             return decode_primitive(os.environ[key])
         except KeyError:
             if default is not None:
-                return decode_primitive(default)
+                return decode_primitive(str(default))
             else:
                 raise ValidationError(f"Environment variable '{key}' not found")
 
