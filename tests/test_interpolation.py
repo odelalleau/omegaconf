@@ -8,7 +8,7 @@ import pytest
 from omegaconf import (
     DictConfig,
     IntegerNode,
-    InterpolationParseError,
+    InterpolationSyntaxError,
     ListConfig,
     OmegaConf,
     Resolver,
@@ -408,18 +408,6 @@ def test_interpolations(cfg: Dict[str, Any], key: str, expected: Any) -> None:
             {"b": "abc_{def}"},
             id="braces_in_string",
         ),
-        pytest.param(
-            """
-            a: A
-            b: ${env:x=A}
-            c: ${env:x=${a}}
-            """,
-            # This behavior may be a bit surprising but it is how it works now. If
-            # it changes in the future we should ensure that both `b` and `c` yield
-            # the same result.
-            {"b": "${env:x=A}", "c": "${env:x=A}"},
-            id="illegal_character_in_interpolation",
-        ),
     ],
 )
 def test_nested_interpolations(cfg: str, expected_dict: Dict[str, Any]) -> None:
@@ -433,6 +421,20 @@ def test_nested_interpolations(cfg: str, expected_dict: Dict[str, Any]) -> None:
         OmegaConf.clear_resolvers()
 
 
+def test_illegal_character_in_interpolation() -> None:
+    c = OmegaConf.create(
+        """
+            a: A
+            b: ${env:x=A}
+            c: ${env:x=${a}}
+            """
+    )
+    with pytest.raises(InterpolationSyntaxError):
+        c.b
+    with pytest.raises(InterpolationSyntaxError):
+        c.c
+
+
 @pytest.mark.parametrize(  # type: ignore
     "cfg,key",
     [
@@ -443,9 +445,8 @@ def test_nested_interpolations(cfg: str, expected_dict: Dict[str, Any]) -> None:
     ],
 )
 def test_nested_interpolation_errors(cfg: Dict[str, Any], key: str) -> None:
-    c = OmegaConf.create(cfg)
-    with pytest.raises(InterpolationParseError):
-        OmegaConf.select(c, key)
+    with pytest.raises(InterpolationSyntaxError):
+        OmegaConf.create(cfg)
 
 
 def test_interpolation_with_missing() -> None:
@@ -488,3 +489,50 @@ def test_merge_with_interpolation() -> None:
 
     with pytest.raises(ValidationError):
         OmegaConf.merge(cfg, {"typed_bar": "nope"})
+
+
+TEST_CONFIG_DATA = [
+    # Primitive types (no interpolation, used as building blocks).
+    ("prim_str", "hi", "hi"),
+    ("prim_str_space", "hello world", "hello world"),
+    # Basic interpolations.
+    ("null", "${identity:null}", None),
+    ("true", "${identity:TrUe}", True),
+    ("false", "${identity:falsE}", False),
+    # Resolver interpolations.
+    ("env_int", "${env:OMEGACONF_TEST_ENV_INT}", 123),
+    # String interpolations.
+    ("str_no_other", "${identity:hi_${prim_str_space}}", "hi_hello world",),
+    ("str_quoted", '${identity:"I say "${prim_str_space}}', "I say hello world",),
+    # Structured interpolations.
+    ("list", "${identity:[0, 1]}", [0, 1]),
+    ("dict", "${identity:{0: 1, 'a': 'b'}}", {0: 1, "a": "b"}),
+    # Edge cases.
+    ("str_other_left", "${identity:.:${prim_str_space}}", ".:hello world",),
+    ("fake_interpolation", "'${prim_str}'", "${prim_str}"),
+    ("fake_and_real_interpolations", "'${'${identity:prim_str}'}'", "${prim_str}"),
+]
+
+
+@pytest.mark.parametrize(  # type: ignore
+    "key,expected",
+    [
+        pytest.param(key, expected, id=key)
+        for key, definition, expected in TEST_CONFIG_DATA
+    ],
+)
+def test_all_interpolations(key: str, expected: Any) -> None:
+    os.environ["OMEGACONF_TEST_ENV_INT"] = "123"
+    OmegaConf.register_resolver(
+        "identity", lambda *args: args[0] if len(args) == 1 else args
+    )
+    try:
+        cfg_dict = {}
+        for cfg_key, definition, _ in TEST_CONFIG_DATA:
+            cfg_dict[cfg_key] = definition
+            if cfg_key == key:
+                break
+        cfg = OmegaConf.create(cfg_dict)
+        assert getattr(cfg, key) == expected
+    finally:
+        OmegaConf.clear_resolvers()

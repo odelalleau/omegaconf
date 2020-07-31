@@ -3,6 +3,7 @@ omit =
     .nox/*
     *tests*
     docs/*
+    omegaconf/grammar/gen/*
     omegaconf/version.py
     .stubs
 
@@ -12,10 +13,13 @@ exclude_lines =
     raise AssertionError
     raise NotImplementedError
     raise TypeError
+    raise InterpolationAmbiguityError
+    raise InterpolationAttemptingFullContextError
+    raise InterpolationContextSensitivityError
     assert False
     @abstractmethod
     \.\.\.
-
+    if TYPE_CHECKING:
 
 [html]
 directory = docs/build/coverage
