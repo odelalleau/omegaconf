@@ -1,7 +1,7 @@
 import os
 import random
 import re
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Tuple
 
 import pytest
 
@@ -14,6 +14,7 @@ from omegaconf import (
     Resolver,
     ValidationError,
 )
+from omegaconf.errors import UnsupportedInterpolationType
 
 
 def test_str_interpolation_dict_1() -> None:
@@ -491,48 +492,186 @@ def test_merge_with_interpolation() -> None:
         OmegaConf.merge(cfg, {"typed_bar": "nope"})
 
 
+def _get_expected_exc(expected: Any) -> Tuple[bool, bool, Optional[Exception]]:
+    """
+    Helper function to obtain information about expected exceptions.
+
+    :param expected: The expected value of a variable, as in `TEST_CONFIG_DATA`.
+        If *creating* a config with this variable is expected to raise an exception,
+        then this value should be a tuple `(False, Exception)`.
+        If *accessing* this variable is expected to raise an exception, then this
+        value should be a tuple `(True, Exception)`.
+    :return: A tuple `(can_create, can_access, exception)` where:
+        * `can_create` indicates whether a config can be created with this variable
+        * `can_access` indicates whether this variable can be accessed
+        * `exception` is the expected exception (None if both booleans are False)
+    """
+    can_create = can_access = True
+    exception = None
+    if (
+        isinstance(expected, tuple)
+        and len(expected) == 2
+        and isinstance(expected[1], type)
+        and issubclass(expected[1], Exception)
+    ):
+        can_create, exception = expected
+        can_access = False
+    return can_create, can_access, exception
+
+
+# Config data used to run many interpolation tests. Each 3-element tuple
+# contains the config key, its value , and its expected value after
+# interpolations are resolved (for exceptions, see `_get_expected_exc()`).
+# If the expected value is the ellipsis ... then it is expected to be the
+# same as the definition.
+# Order matters! (each entry should only depend on those above)
 TEST_CONFIG_DATA = [
-    # Primitive types (no interpolation, used as building blocks).
-    ("prim_str", "hi", "hi"),
-    ("prim_str_space", "hello world", "hello world"),
-    # Basic interpolations.
+    # Not interpolations (just building blocks for below).
+    ("prim_str", "hi", ...),
+    ("prim_str_space", "hello world", ...),
+    # Primitive types.
     ("null", "${identity:null}", None),
     ("true", "${identity:TrUe}", True),
     ("false", "${identity:falsE}", False),
     # Resolver interpolations.
     ("env_int", "${env:OMEGACONF_TEST_ENV_INT}", 123),
+    ("env_missing_str", "${env:OMEGACONF_TEST_MISSING,miss}", "miss"),
+    ("env_missing_int", "${env:OMEGACONF_TEST_MISSING,123}", 123),
+    ("env_missing_float", "${env:OMEGACONF_TEST_MISSING,1e-2}", 0.01),
+    ("space_in_args", "${identity:a, b c}", ["a", "b c"]),
+    ("list_as_input", "${identity:[a, b], 0, [1.1]}", [["a", "b"], 0, [1.1]]),
+    ("dict_as_input", "${identity:{'a': 1.1, b: b}}", {"a": 1.1, "b": "b"}),
+    # Legal vs illegal characters in non-quoted strings within interpolations.
+    ("str_legal_noquote", "${identity:a/-%#?&@,.b:}", ["a/-%#?&@", ".b:"]),
+    ("str_illegal_noquote", "${identity:a,=b}", (True, InterpolationSyntaxError)),
+    ("str_illegal_quoted", "${identity:a,'=b'}", ["a", "=b"]),
     # String interpolations.
     ("str_no_other", "${identity:hi_${prim_str_space}}", "hi_hello world",),
-    ("str_quoted", '${identity:"I say "${prim_str_space}}', "I say hello world",),
+    (
+        "str_quoted_double",
+        '${identity:"I say "${prim_str_space}}',
+        "I say hello world",
+    ),
+    (
+        "str_quoted_single",
+        "${identity:'I say '${prim_str_space}}",
+        "I say hello world",
+    ),
+    (
+        "str_quoted_mixed",
+        "${identity:'I '\"say \"${prim_str_space}}",
+        "I say hello world",
+    ),
+    ("str_toplevel_any", "I,.:!/@#$%^&*({[_${prim_str}]", "I,.:!/@#$%^&*({[_hi]"),
     # Structured interpolations.
     ("list", "${identity:[0, 1]}", [0, 1]),
     ("dict", "${identity:{0: 1, 'a': 'b'}}", {0: 1, "a": "b"}),
-    # Edge cases.
+    # Nested interpolations.
+    ("ref_prim_str", "prim_str", "prim_str"),
+    ("nested_simple", "${${ref_prim_str}}", "hi"),
+    ("plans", {"plan A": "awesome plan", "plan B": "crappy plan"}, ...),
+    ("selected_plan", "A", ...),
+    (
+        "nested_dotted",
+        "I choose: ${plans.plan\\ ${selected_plan}}",
+        "I choose: awesome plan",
+    ),
+    ("nested_deep", "${identity:${${identity:${ref_prim_str}}}}", "hi"),
+    # ##### Unusual / edge cases below #####
+    # Unquoted `.` and/or `:` on the left of a string interpolation.
     ("str_other_left", "${identity:.:${prim_str_space}}", ".:hello world",),
+    # Quoted interpolation (=> not actually an interpolation).
     ("fake_interpolation", "'${prim_str}'", "${prim_str}"),
+    # Same as previous, but combined with a "real" interpolation.
     ("fake_and_real_interpolations", "'${'${identity:prim_str}'}'", "${prim_str}"),
+    # Un-matched top-level opening brace in quoted ${
+    (
+        "interpolation_in_quoted_str",
+        "'${'${identity:prim_str}",
+        (True, InterpolationSyntaxError),
+    ),
+    # Special IDs as keys.
+    ("None", {"True": 1}, {"True": 1}),
+    ("special_key_exact_spelling", "${None.True}", 1),
+    ("special_key_alternate_spelling", "${null.true}", 1),
+    # Resolvers with special IDs (resolvers are registered with all of these strings).
+    ("int_resolver", "${0:1,2,3}", ["0", 1, 2, 3]),
+    ("float_resolver", "${1.1:1,2,3}", ["1.1", 1, 2, 3]),
+    ("float_resolver_exp", "${1e1:1,2,3}", (True, UnsupportedInterpolationType)),
+    ("bool_resolver_bad_case", "${FALSE:1,2,3}", (True, UnsupportedInterpolationType)),
+    ("bool_resolver_good_case", "${True:1,2,3}", ["True", 1, 2, 3]),
+    ("null_resolver", "${null:1,2,3}", (True, UnsupportedInterpolationType)),
+    # Special IDs as default values to `env:` resolver.
+    ("env_missing_null_quoted", "${env:OMEGACONF_TEST_MISSING,'null'}", "null"),
+    (
+        "env_missing_null_noquote",
+        "${env:OMEGACONF_TEST_MISSING,null}",
+        (True, ValidationError),
+    ),
+    ("env_missing_bool_quoted", "${env:OMEGACONF_TEST_MISSING,'True'}", True),
+    ("env_missing_bool_noquote", "${env:OMEGACONF_TEST_MISSING,True}", True),
+    # Special IDs as dictionary keys.
+    (
+        "dict_special_null",
+        "${identity:{null: null, 'null': 'null'}}",
+        {None: None, "null": "null"},
+    ),
+    (
+        "dict_special_bool",
+        "${identity:{true: true, 'false': 'false'}}",
+        {True: True, "false": "false"},
+    ),
+    # Having an unquoted string made only of `.` and `:`.
+    ("str_otheronly_noquote", "${identity:a, .:}", (True, InterpolationSyntaxError)),
+    # Using an integer as config key.
+    ("0", 0, ...),
+    ("1", {"2": 2}, ...),
+    ("int_key_in_interpolation_1", "${0}", 0),
+    ("int_key_in_interpolation_2", "${1.2}", 2),
 ]
 
 
 @pytest.mark.parametrize(  # type: ignore
     "key,expected",
     [
-        pytest.param(key, expected, id=key)
+        pytest.param(key, definition if expected is ... else expected, id=key)
         for key, definition, expected in TEST_CONFIG_DATA
     ],
 )
 def test_all_interpolations(key: str, expected: Any) -> None:
     os.environ["OMEGACONF_TEST_ENV_INT"] = "123"
+    os.environ.pop("OMEGACONF_TEST_MISSING", None)
     OmegaConf.register_resolver(
-        "identity", lambda *args: args[0] if len(args) == 1 else args
+        "identity", lambda *args: args[0] if len(args) == 1 else list(args)
     )
+    OmegaConf.register_resolver("0", lambda *args: ["0"] + list(args))
+    OmegaConf.register_resolver("1.1", lambda *args: ["1.1"] + list(args))
+    OmegaConf.register_resolver("1e1", lambda *args: ["1e1"] + list(args))
+    OmegaConf.register_resolver("null", lambda *args: ["null"] + list(args))
+    OmegaConf.register_resolver("FALSE", lambda *args: ["FALSE"] + list(args))
+    OmegaConf.register_resolver("True", lambda *args: ["True"] + list(args))
+
     try:
         cfg_dict = {}
-        for cfg_key, definition, _ in TEST_CONFIG_DATA:
-            cfg_dict[cfg_key] = definition
+        for cfg_key, definition, exp in TEST_CONFIG_DATA:
+            can_create, can_access, exception = _get_expected_exc(exp)
+            if can_create or cfg_key == key:
+                assert cfg_key not in cfg_dict, f"duplicated key: {cfg_key}"
+                cfg_dict[cfg_key] = definition
             if cfg_key == key:
                 break
-        cfg = OmegaConf.create(cfg_dict)
-        assert getattr(cfg, key) == expected
+        can_create, can_access, exception = _get_expected_exc(expected)
+        if can_create:
+            cfg = OmegaConf.create(cfg_dict)
+        else:
+            with pytest.raises(exception):
+                OmegaConf.create(cfg_dict)
+
+        if can_access:
+            assert getattr(cfg, key) == expected
+        elif can_create:
+            with pytest.raises(exception):
+                getattr(cfg, key)
+
     finally:
         OmegaConf.clear_resolvers()
