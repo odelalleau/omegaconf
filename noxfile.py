@@ -12,7 +12,7 @@ PYTHON_VERSIONS = os.environ.get(
 
 def deps(session):
     session.install("--upgrade", "setuptools", "pip")
-    session.install("-r", "requirements/dev.txt", "-e", ".", silent=True)
+    session.install("-r", "requirements/dev.txt", ".", silent=True)
 
 
 @nox.session(python=PYTHON_VERSIONS)
