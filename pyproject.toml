@@ -11,6 +11,9 @@ exclude = '''
 )
 '''
 
+[tool.pytest.ini_options]
+addopts = "--import-mode=append"
+
 [tool.towncrier]
     package = "omegaconf"
     package_dir = ""
