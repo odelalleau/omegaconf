@@ -1,3 +1,4 @@
+import math
 import os
 import random
 import re
@@ -576,43 +577,175 @@ TEST_CONFIG_DATA = [
     # Not interpolations (just building blocks for below).
     ("prim_str", "hi", ...),
     ("prim_str_space", "hello world", ...),
+    ("id", "identity", ...),
+    ("id_partial", "entity", ...),
     # Primitive types.
     ("null", "${identity:null}", None),
     ("true", "${identity:TrUe}", True),
     ("false", "${identity:falsE}", False),
+    ("truefalse", "${identity:true_false}", "true_false"),
+    ("unquoted_str_space", "${identity:hello world}", "hello world"),
+    ("unquoted_str_esc_space", r"${identity:\ hello\ world\ }", " hello world "),
+    ("unquoted_str_esc_comma", r"${identity:hello\, world}", "hello, world"),
+    ("quoted_str_single", "${identity:'!@#$%^&*()[]:.,'}", "!@#$%^&*()[]:.,"),
+    ("quoted_str_double", '${identity:"!@#$%^&*()[]:.,"}', "!@#$%^&*()[]:.,"),
+    ("int", "${identity:123}", 123),
+    ("int_pos", "${identity:+123}", 123),
+    ("int_neg", "${identity:-123}", -123),
+    ("int_underscore", "${identity:1_000}", 1000),
+    ("int_underscore_bad_1", "${identity:1_000_}", "1_000_"),
+    ("int_underscore_bad_2", "${identity:1__000}", "1__000"),
+    ("int_underscore_bad_3", "${identity:_1000}", "_1000"),
+    ("int_zero_start_bad", "${identity:02}", "02"),
+    ("float", "${identity:1.1}", 1.1),
+    ("float_no_int", "${identity:.1}", 0.1),
+    ("float_no_decimal", "${identity:1.}", 1.0),
+    ("float_exp_1", "${identity:-1e2}", -100.0),
+    ("float_exp_2", "${identity:+1E-2}", 0.01),
+    ("float_exp_3", "${identity:1_0e1_0}", 10e10),
+    ("float_exp_bad_1", "${identity:1e-02}", "1e-02"),
+    ("float_exp_bad_2", "${identity:e-2}", "e-2"),
+    ("float_exp_bad_3", "${identity:01e2}", "01e2"),
+    ("float_inf", "${identity:inf}", math.inf),
+    ("float_plus_inf", "${identity:+inf}", math.inf),
+    ("float_minus_inf", "${identity:-inf}", -math.inf),
+    ("float_nan", "${identity:nan}", math.nan),
+    ("float_plus_nan", "${identity:+nan}", math.nan),
+    ("float_minus_nan", "${identity:-nan}", math.nan),
     # Resolver interpolations.
     ("env_int", "${env:OMEGACONF_TEST_ENV_INT}", 123),
     ("env_missing_str", "${env:OMEGACONF_TEST_MISSING,miss}", "miss"),
     ("env_missing_int", "${env:OMEGACONF_TEST_MISSING,123}", 123),
     ("env_missing_float", "${env:OMEGACONF_TEST_MISSING,1e-2}", 0.01),
+    ("env_missing_quoted_int", "${env:OMEGACONF_TEST_MISSING,'1'}", 1),  # FIXME "1"
     ("space_in_args", "${identity:a, b c}", ["a", "b c"]),
     ("list_as_input", "${identity:[a, b], 0, [1.1]}", [["a", "b"], 0, [1.1]]),
     ("dict_as_input", "${identity:{'a': 1.1, b: b}}", {"a": 1.1, "b": "b"}),
     # Legal vs illegal characters in non-quoted strings within interpolations.
     ("str_legal_noquote", "${identity:a/-%#?&@,.b:}", ["a/-%#?&@", ".b:"]),
-    ("str_illegal_noquote", "${identity:a,=b}", (True, InterpolationSyntaxError)),
+    (
+        "str_illegal_noquote",
+        "${identity:a,=b}",
+        (True, InterpolationSyntaxError),
+    ),  # FIXME ["a", "=b"]
     ("str_illegal_quoted", "${identity:a,'=b'}", ["a", "=b"]),
-    # String interpolations.
-    ("str_no_other", "${identity:hi_${prim_str_space}}", "hi_hello world",),
+    # String interpolations (top-level).
+    ("str_top_basic", "bonjour ${prim_str}", "bonjour hi"),
+    (
+        "str_top_quoted_single",
+        "'bonjour ${prim_str}'",
+        "bonjour ${prim_str}",
+    ),  # FIXME "'bonjour hi'"
+    (
+        "str_top_quoted_double",
+        '"bonjour ${prim_str}"',
+        "bonjour ${prim_str}",
+    ),  # FIXME '"bonjour hi"'
+    (
+        "str_top_keep_quotes_double",
+        '"My name is ${prim_str}", I said.',
+        "My name is ${prim_str}, I said.",
+    ),  # FIXME '"My name is hi", I said.'
+    (
+        "str_top_keep_quotes_single",
+        "'My name is ${prim_str}', I said.",
+        "My name is ${prim_str}, I said.",
+    ),  # FIXME "'My name is hi', I said."
+    ("str_top_any_char", "${prim_str} !@\\#$%^&*})][({,/?;", "hi !@\\#$%^&*})][({,/?;"),
+    (
+        "str_top_missing_end_quote_single",
+        "'${prim_str}",
+        (False, InterpolationSyntaxError),
+    ),  # FIXME "'hi"
+    (
+        "str_top_missing_end_quote_double",
+        '"${prim_str}',
+        (False, InterpolationSyntaxError),
+    ),  # FIXME '"hi'
+    (
+        "str_top_missing_start_quote_double",
+        '${prim_str}"',
+        (False, InterpolationSyntaxError),
+    ),  # FIXME 'hi"'
+    (
+        "str_top_missing_start_quote_single",
+        "${prim_str}'",
+        (False, InterpolationSyntaxError),
+    ),  # FIXME "hi'"
+    (
+        "str_top_middle_quote_single",
+        "I'd like ${prim_str}",
+        (False, InterpolationSyntaxError),
+    ),  # FIXME "I'd like hi"
+    (
+        "str_top_middle_quote_double",
+        'I"d like ${prim_str}',
+        (False, InterpolationSyntaxError),
+    ),  # FIXME 'I"d like hi'
+    (
+        "str_top_middle_quotes_single",
+        "I like '${prim_str}'",
+        "I like ${prim_str}",
+    ),  # FIXME "I like 'hi'"
+    (
+        "str_top_quoted_inter",
+        r"Not an interpolation: \${prim_str\}",
+        (True, InterpolationSyntaxError),
+    ),  # FIXME r"Not an interpolation: ${prim_str}"
+    (
+        "str_top_quoted_inter_error",
+        r"Missing escape: \${prim_str}",
+        r"Missing escape: \hi",
+    ),  # FIXME (True, InterpolationSyntaxError)
+    (
+        "str_top_quoted_braces",
+        r"Braced: \{${prim_str}\}",
+        r"Braced: \{hi\}",
+    ),  # FIXME "Braced: {hi}"
+    # String interpolations (within interpolations).
+    ("str_no_other", "${identity:hi_${prim_str_space}}", "hi_hello world"),
     (
         "str_quoted_double",
         '${identity:"I say "${prim_str_space}}',
         "I say hello world",
-    ),
+    ),  # FIXME '"I say "hello world'
     (
         "str_quoted_single",
         "${identity:'I say '${prim_str_space}}",
         "I say hello world",
-    ),
+    ),  # FIXME "'I say 'hello world"
     (
         "str_quoted_mixed",
         "${identity:'I '\"say \"${prim_str_space}}",
         "I say hello world",
-    ),
-    ("str_toplevel_any", "I,.:!/@#$%^&*({[_${prim_str}]", "I,.:!/@#$%^&*({[_hi]"),
+    ),  # FIXME "'I '\"say \"hello world"
+    ("str_quoted_int", "${identity:'123'}", "123"),
+    ("str_quoted_null", "${identity:'null'}", "null"),
+    ("str_quoted_bool", "${identity:'truE', \"FalSe\"}", ["truE", "FalSe"]),
     # Structured interpolations.
     ("list", "${identity:[0, 1]}", [0, 1]),
     ("dict", "${identity:{0: 1, 'a': 'b'}}", {0: 1, "a": "b"}),
+    (
+        "structured_mixed",
+        "${identity:10,str,3.14,true,false,inf,[1,2,3], 'quoted', \"quoted\", 'a,b,c'}",
+        [
+            10,
+            "str",
+            3.14,
+            True,
+            False,
+            math.inf,
+            [1, 2, 3],
+            "quoted",
+            "quoted",
+            "a,b,c",
+        ],
+    ),
+    (
+        "structured_deep",
+        '${identity:{null: [0, 3.14, false], true: {"a": [0, 1, 2], "b": {}}}}',
+        {None: [0, 3.14, False], True: {"a": [0, 1, 2], "b": {}}},
+    ),
     # Nested interpolations.
     ("ref_prim_str", "prim_str", "prim_str"),
     ("nested_simple", "${${ref_prim_str}}", "hi"),
@@ -620,17 +753,23 @@ TEST_CONFIG_DATA = [
     ("selected_plan", "A", ...),
     (
         "nested_dotted",
-        "I choose: ${plans.plan\\ ${selected_plan}}",
+        r"I choose: ${plans.plan\ ${selected_plan}}",
         "I choose: awesome plan",
     ),
     ("nested_deep", "${identity:${${identity:${ref_prim_str}}}}", "hi"),
+    ("nested_resolver", "${${id}:a, b, c}", ["a", "b", "c"]),
+    ("nested_resolver_combined", "${id${id_partial}:a, b, c}", ["a", "b", "c"]),
     # ##### Unusual / edge cases below #####
     # Unquoted `.` and/or `:` on the left of a string interpolation.
     ("str_other_left", "${identity:.:${prim_str_space}}", ".:hello world",),
     # Quoted interpolation (=> not actually an interpolation).
-    ("fake_interpolation", "'${prim_str}'", "${prim_str}"),
+    ("fake_interpolation", "'${prim_str}'", "${prim_str}"),  # FIXME "'hi'"
     # Same as previous, but combined with a "real" interpolation.
-    ("fake_and_real_interpolations", "'${'${identity:prim_str}'}'", "${prim_str}"),
+    (
+        "fake_and_real_interpolations",
+        "'${'${identity:prim_str}'}'",
+        "${prim_str}",
+    ),  # FIXME (True, SomeError)
     # Un-matched top-level opening brace in quoted ${
     (
         "interpolation_in_quoted_str",
@@ -638,24 +777,51 @@ TEST_CONFIG_DATA = [
         (True, InterpolationSyntaxError),
     ),
     # Special IDs as keys.
-    ("None", {"True": 1}, {"True": 1}),
-    ("special_key_exact_spelling", "${None.True}", 1),
-    ("special_key_alternate_spelling", "${null.true}", 1),
+    ("None", {"True": 1}, ...),
+    ("special_key_exact_spelling", "${None.True}", 1),  # FIXME (True, SomeError)
+    ("special_key_alternate_spelling", "${null.true}", 1),  # FIXME (True, SomeError)
+    ("special_key_quoted", "${'None.True'}", 1),
     # Resolvers with special IDs (resolvers are registered with all of these strings).
-    ("int_resolver", "${0:1,2,3}", ["0", 1, 2, 3]),
-    ("float_resolver", "${1.1:1,2,3}", ["1.1", 1, 2, 3]),
-    ("float_resolver_exp", "${1e1:1,2,3}", (True, UnsupportedInterpolationType)),
-    ("bool_resolver_bad_case", "${FALSE:1,2,3}", (True, UnsupportedInterpolationType)),
-    ("bool_resolver_good_case", "${True:1,2,3}", ["True", 1, 2, 3]),
-    ("null_resolver", "${null:1,2,3}", (True, UnsupportedInterpolationType)),
+    ("int_resolver_quoted", "${'0':1,2,3}", ["0", 1, 2, 3]),
+    ("int_resolver_noquote", "${0:1,2,3}", ["0", 1, 2, 3]),  # FIXME (True, SomeError)
+    ("float_resolver_quoted", "${'1.1':1,2,3}", ["1.1", 1, 2, 3]),
+    (
+        "float_resolver_noquote",
+        "${1.1:1,2,3}",
+        ["1.1", 1, 2, 3],
+    ),  # FIXME (True, SomeError)
+    (
+        "float_resolver_exp",
+        "${1e1:1,2,3}",
+        (True, UnsupportedInterpolationType),
+    ),  # FIXME should be another error
+    (
+        "bool_resolver_bad_case",
+        "${FALSE:1,2,3}",
+        (True, UnsupportedInterpolationType),
+    ),  # FIXME should be another error
+    (
+        "bool_resolver_good_case",
+        "${True:1,2,3}",
+        ["True", 1, 2, 3],
+    ),  # FIXME (True, SomeError)
+    (
+        "null_resolver",
+        "${null:1,2,3}",
+        (True, UnsupportedInterpolationType),
+    ),  # FIXME should be another error
     # Special IDs as default values to `env:` resolver.
     ("env_missing_null_quoted", "${env:OMEGACONF_TEST_MISSING,'null'}", "null"),
     (
         "env_missing_null_noquote",
         "${env:OMEGACONF_TEST_MISSING,null}",
         (True, ValidationError),
-    ),
-    ("env_missing_bool_quoted", "${env:OMEGACONF_TEST_MISSING,'True'}", True),
+    ),  # FIXME None
+    (
+        "env_missing_bool_quoted",
+        "${env:OMEGACONF_TEST_MISSING,'True'}",
+        True,
+    ),  # FIXME "True"
     ("env_missing_bool_noquote", "${env:OMEGACONF_TEST_MISSING,True}", True),
     # Special IDs as dictionary keys.
     (
@@ -669,12 +835,18 @@ TEST_CONFIG_DATA = [
         {True: True, "false": "false"},
     ),
     # Having an unquoted string made only of `.` and `:`.
-    ("str_otheronly_noquote", "${identity:a, .:}", (True, InterpolationSyntaxError)),
+    (
+        "str_otheronly_noquote",
+        "${identity:a, .:}",
+        (True, InterpolationSyntaxError),
+    ),  # FIXME ["a", ".:"]
     # Using an integer as config key.
     ("0", 0, ...),
     ("1", {"2": 2}, ...),
-    ("int_key_in_interpolation_1", "${0}", 0),
-    ("int_key_in_interpolation_2", "${1.2}", 2),
+    ("int_key_in_interpolation_noquote", "${0}", 0),  # FIXME (True, SomeError)
+    ("int_key_in_interpolation_quoted", "${'0'}", 0),
+    ("int_key_in_interpolation_x2_noquote", "${1.2}", 2),  # FIXME (True, SomeError)
+    ("int_key_in_interpolation_x2_quoted", "${'1.2'}", 2),
 ]
 
 
@@ -729,7 +901,12 @@ def test_all_interpolations(key: str, expected: Any) -> None:
                 OmegaConf.create(cfg_dict)
 
         if can_access:
-            assert getattr(cfg, key) == expected
+            # print(getattr(cfg, key))
+            if expected is math.nan:
+                # Special case since nan != nan.
+                assert math.isnan(getattr(cfg, key))
+            else:
+                assert getattr(cfg, key) == expected
         elif can_create:
             with pytest.raises(exception):
                 getattr(cfg, key)
