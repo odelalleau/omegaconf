@@ -92,8 +92,8 @@ class ResolveInterpolationVisitor(InterpolationVisitor):
         """
         The `resolve_func` argument is a function that will be called to
         resolve simple interpolations, i.e. any non-nested interpolation of the form
-        "${a.b.c}" or "${foo:a,b,c}". It must take the two keyword arguments
-        `inter_type` and `inter_key`.
+        "${a.b.c}" or "${foo:a,b,c}". It must take the three keyword arguments
+        `inter_type`, `inter_key` and `inputs_str`.
         """
         super().__init__(**kw)
         self._resolve_func = resolve_func
@@ -201,8 +201,16 @@ class ResolveInterpolationVisitor(InterpolationVisitor):
         # '${' id_maybe_interpolated ':' sequence_of_items '}'
         assert ctx.getChildCount() == 5
         inter_type = str(self.visit(ctx.getChild(1))) + ":"
-        inter_key = tuple(map(_get_value, self.visit(ctx.getChild(3))))
-        return self._resolve_func(inter_type=inter_type, inter_key=inter_key)
+        inter_key = []
+        inputs_str = []
+        for val, txt in self.visitSequence_of_items(ctx.getChild(3)):
+            inter_key.append(_get_value(val))
+            inputs_str.append(txt)
+        return self._resolve_func(
+            inter_type=inter_type,
+            inter_key=tuple(inter_key),
+            inputs_str=tuple(inputs_str),
+        )
 
     def visitRoot(self, ctx: InterpolationParser.RootContext) -> Any:
         assert ctx.getChildCount() == 2  # item EOF
@@ -215,7 +223,11 @@ class ResolveInterpolationVisitor(InterpolationVisitor):
         for i, child in enumerate(ctx.getChildren()):
             if i % 2 == 0:
                 assert isinstance(child, InterpolationParser.ItemContext)
-                yield self.visitItem(child)
+                # Also preserve the original text representation of `child` so
+                # as to allow backward compatibility with old resolvers (registered
+                # with `variables_as_strings=True`). Note that we cannot just cast
+                # the value to string later as for instance `null` would become "None".
+                yield self.visitItem(child), child.getText()
             else:
                 assert isinstance(child, TerminalNode) and child.getText() == ","
 
@@ -299,7 +311,7 @@ class ResolveInterpolationVisitor(InterpolationVisitor):
         self, ctx: InterpolationParser.List_of_itemsContext
     ) -> List[Any]:
         assert ctx.getChildCount() == 3  # '[' sequence_of_items ']'
-        return list(self.visit(ctx.getChild(1)))
+        return list(val for val, txt in self.visit(ctx.getChild(1)))
 
     def visitDict_of_items(
         self, ctx: InterpolationParser.Dict_of_itemsContext
