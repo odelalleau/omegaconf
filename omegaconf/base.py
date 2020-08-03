@@ -355,6 +355,7 @@ class Container(Node):
         inter_key: Tuple[Any],
         throw_on_missing: bool,
         throw_on_resolution_failure: bool,
+        inputs_str: Optional[Tuple[str]] = None,  # text representation of inputs
     ) -> Optional["Node"]:
         from omegaconf import OmegaConf
 
@@ -365,6 +366,7 @@ class Container(Node):
         inter_type = ("str:" if inter_type is None else inter_type)[0:-1]
         if inter_type == "str":
             assert len(inter_key) == 1 and isinstance(inter_key[0], str)
+            assert inputs_str is None
             parent, last_key, value = root_node._select_impl(
                 inter_key[0],
                 throw_on_missing=throw_on_missing,
@@ -382,10 +384,11 @@ class Container(Node):
             assert isinstance(value, Node)
             return value
         else:
+            assert inputs_str is not None
             resolver = OmegaConf.get_resolver(inter_type)
             if resolver is not None:
                 try:
-                    value = resolver(root_node, inter_key)
+                    value = resolver(root_node, inter_key, inputs_str)
                     return ValueNode(
                         value=value,
                         parent=self,

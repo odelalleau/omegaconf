@@ -221,7 +221,7 @@ def test_clear_resolvers(restore_resolvers: Any) -> None:
 
 
 def test_register_resolver_1(restore_resolvers: Any) -> None:
-    OmegaConf.register_resolver("plus_10", lambda x: int(x) + 10)
+    OmegaConf.register_resolver("plus_10", lambda x: x + 10, variables_as_strings=False)
     c = OmegaConf.create(dict(k="${plus_10:990}"))
 
     assert type(c.k) == int
@@ -254,7 +254,9 @@ def test_resolver_cache_3_dict_list(restore_resolvers: Any) -> None:
     """
     Tests that the resolver cache works as expected with lists and dicts.
     """
-    OmegaConf.register_resolver("random", lambda _: random.uniform(0, 1))
+    OmegaConf.register_resolver(
+        "random", lambda _: random.uniform(0, 1), variables_as_strings=False
+    )
     c = OmegaConf.create(
         dict(
             lst1="${random:[0, 1]}",
@@ -302,6 +304,25 @@ def test_resolver_that_allows_a_list_of_arguments(
     c = OmegaConf.create({name: key})
     assert isinstance(c, DictConfig)
     assert c[name] == result
+
+
+def test_resolver_deprecated_behavior(restore_resolvers: Any) -> None:
+    OmegaConf.register_resolver("my_resolver", lambda *args: args)
+    c = OmegaConf.create(
+        {
+            "int": "${my_resolver:1}",
+            "null": "${my_resolver:null}",
+            "bool": "${my_resolver:TruE,falSE}",
+            "str": "${my_resolver:a,b,c}",
+        }
+    )
+    with pytest.warns(UserWarning):
+        assert c.int == ("1",)
+    with pytest.warns(UserWarning):
+        assert c.null == ("null",)
+    with pytest.warns(UserWarning):
+        assert c.bool == ("TruE", "falSE")
+    assert c.str == ("a", "b", "c")
 
 
 def test_copy_cache(restore_resolvers: Any) -> None:
@@ -439,7 +460,7 @@ def test_interpolations(cfg: Dict[str, Any], key: str, expected: Any) -> None:
 )
 def test_nested_interpolations(cfg: str, expected_dict: Dict[str, Any]) -> None:
     os.environ["OMEGACONF_NESTED_INTERPOLATIONS_TEST"] = "test123"
-    OmegaConf.register_resolver("plus", lambda x, y: int(x) + int(y))
+    OmegaConf.register_resolver("plus", lambda x, y: x + y, variables_as_strings=False)
     try:
         c = OmegaConf.create(cfg)
         for key, expected in expected_dict.items():
@@ -668,14 +689,28 @@ def test_all_interpolations(key: str, expected: Any) -> None:
     os.environ["OMEGACONF_TEST_ENV_INT"] = "123"
     os.environ.pop("OMEGACONF_TEST_MISSING", None)
     OmegaConf.register_resolver(
-        "identity", lambda *args: args[0] if len(args) == 1 else list(args)
+        "identity",
+        lambda *args: args[0] if len(args) == 1 else list(args),
+        variables_as_strings=False,
     )
-    OmegaConf.register_resolver("0", lambda *args: ["0"] + list(args))
-    OmegaConf.register_resolver("1.1", lambda *args: ["1.1"] + list(args))
-    OmegaConf.register_resolver("1e1", lambda *args: ["1e1"] + list(args))
-    OmegaConf.register_resolver("null", lambda *args: ["null"] + list(args))
-    OmegaConf.register_resolver("FALSE", lambda *args: ["FALSE"] + list(args))
-    OmegaConf.register_resolver("True", lambda *args: ["True"] + list(args))
+    OmegaConf.register_resolver(
+        "0", lambda *args: ["0"] + list(args), variables_as_strings=False
+    )
+    OmegaConf.register_resolver(
+        "1.1", lambda *args: ["1.1"] + list(args), variables_as_strings=False
+    )
+    OmegaConf.register_resolver(
+        "1e1", lambda *args: ["1e1"] + list(args), variables_as_strings=False
+    )
+    OmegaConf.register_resolver(
+        "null", lambda *args: ["null"] + list(args), variables_as_strings=False
+    )
+    OmegaConf.register_resolver(
+        "FALSE", lambda *args: ["FALSE"] + list(args), variables_as_strings=False
+    )
+    OmegaConf.register_resolver(
+        "True", lambda *args: ["True"] + list(args), variables_as_strings=False
+    )
 
     try:
         cfg_dict = {}

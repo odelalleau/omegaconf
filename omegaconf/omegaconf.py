@@ -4,6 +4,7 @@ import io
 import os
 import pathlib
 import sys
+import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from enum import Enum
@@ -121,7 +122,7 @@ def register_default_resolvers() -> None:
             else:
                 raise ValidationError(f"Environment variable '{key}' not found")
 
-    OmegaConf.register_resolver("env", env)
+    OmegaConf.register_resolver("env", env, variables_as_strings=False)
 
 
 class OmegaConf:
@@ -320,27 +321,58 @@ class OmegaConf:
         return target
 
     @staticmethod
-    def register_resolver(name: str, resolver: Resolver) -> None:
+    def register_resolver(
+        name: str, resolver: Resolver, variables_as_strings: bool = True
+    ) -> None:
+        """
+        The `variables_as_strings` flag was introduced to preserve backward compatibility
+        with the older resolver system, which assumed that resolvers took the raw string
+        representation of their inputs:
+            - `True` is the old behavior (the resolver uses the string representation
+              of its inputs), and triggers a warning
+            - `False` is the new behavior (the resolver can take non-string inputs), and
+              will become the default in the future
+        """
         assert callable(resolver), "resolver must be callable"
         # noinspection PyProtectedMember
         assert (
             name not in BaseContainer._resolvers
         ), "resolved {} is already registered".format(name)
 
-        def caching(config: BaseContainer, key: Tuple[Any, ...]) -> Any:
+        def caching(
+            config: BaseContainer, key: Tuple[Any, ...], inputs_str: Tuple[str, ...]
+        ) -> Any:
+            # The `variables_as_strings` warning is triggered when the resolver is
+            # called instead of when it is defined, so as to limit the amount of
+            # warnings (by skipping warnings when all inputs are strings).
+            if variables_as_strings and any(not isinstance(k, str) for k in key):
+                warnings.warn(
+                    f"Using resolvers that assume all inputs are given as strings is "
+                    f"now deprecated. Please update resolver '{name}' to take "
+                    f"non-string inputs and register it with "
+                    f"`variables_as_strings=False` (this will become the default "
+                    f"behavior in the future).",
+                    category=UserWarning,
+                )
+                inputs = inputs_str
+            else:
+                inputs = key
+
             cache = OmegaConf.get_cache(config)[name]
             hashable_key = _make_hashable(key)
             try:
                 val = cache[hashable_key]
             except KeyError:
-                val = cache[hashable_key] = resolver(*key)
+                val = cache[hashable_key] = resolver(*inputs)
             return val
 
         # noinspection PyProtectedMember
         BaseContainer._resolvers[name] = caching
 
     @staticmethod
-    def get_resolver(name: str) -> Optional[Callable[[Container, Any], Any]]:
+    def get_resolver(
+        name: str,
+    ) -> Optional[Callable[[Container, Tuple[Any, ...], Tuple[str, ...]], Any]]:
         # noinspection PyProtectedMember
         return (
             BaseContainer._resolvers[name] if name in BaseContainer._resolvers else None

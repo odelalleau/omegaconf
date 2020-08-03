@@ -339,12 +339,15 @@ The following example sets `12345` as the the default value for the `DB_PASSWORD
 
 Custom interpolations
 ^^^^^^^^^^^^^^^^^^^^^
-You can add additional interpolation types using custom resolvers, which take strings as inputs.
-This example creates a resolver that adds 10 to the given value (note the need to cast it to `int`).
+
+You can add additional interpolation types using custom resolvers.
+This example creates a resolver that adds 10 to the given value
+(note the need to specify `variables_as_strings=False` when the resolver takes non-string inputs --
+this is to preserve backward compatibility with the old behavior where resolver inputs were systematically cast to strings).
 
 .. doctest::
 
-    >>> OmegaConf.register_resolver("plus_10", lambda x: int(x) + 10)
+    >>> OmegaConf.register_resolver("plus_10", lambda x: x + 10, variables_as_strings=False)
     >>> c = OmegaConf.create({'key': '${plus_10:990}'})
     >>> c.key
     1000
@@ -374,7 +377,8 @@ You can take advantage of nested interpolations to perform operations over varia
 .. doctest::
 
     >>> OmegaConf.register_resolver("plus_int",
-    ...                             lambda x, y: int(x) + int(y))
+    ...                             lambda x, y: x + y,
+    ...                             variables_as_strings=False)
     >>> c = OmegaConf.create({"a": 1,
     ...                       "b": 2,
     ...                       "a_plus_b": "${plus_int:${a},${b}}"})
