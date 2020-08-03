@@ -250,6 +250,32 @@ def test_resolver_cache_2(restore_resolvers: Any) -> None:
     assert c2.k == c2.k
 
 
+def test_resolver_cache_3_dict_list(restore_resolvers: Any) -> None:
+    """
+    Tests that the resolver cache works as expected with lists and dicts.
+    """
+    OmegaConf.register_resolver("random", lambda _: random.uniform(0, 1))
+    c = OmegaConf.create(
+        dict(
+            lst1="${random:[0, 1]}",
+            lst2="${random:[0, 1]}",
+            lst3="${random:[]}",
+            dct1="${random:{0: 1, 1: 2}}",
+            dct2="${random:{1: 2, 0: 1}}",
+            mixed1="${random:{0: [1.1], 1: {a: true, b: false, c: null, d: []}}}",
+            mixed2="${random:{0: [1.1], 1: {b: false, c: null, a: true, d: []}}}",
+        )
+    )
+    assert c.lst1 == c.lst1
+    assert c.lst1 == c.lst2
+    assert c.lst1 != c.lst3
+    assert c.dct1 == c.dct1
+    assert c.dct1 != c.dct2
+    assert c.mixed1 == c.mixed1
+    assert c.mixed2 == c.mixed2
+    assert c.mixed1 != c.mixed2
+
+
 @pytest.mark.parametrize(  # type: ignore
     "resolver,name,key,result",
     [
