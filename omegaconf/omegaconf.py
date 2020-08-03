@@ -329,13 +329,11 @@ class OmegaConf:
 
         def caching(config: BaseContainer, key: Tuple[Any, ...]) -> Any:
             cache = OmegaConf.get_cache(config)[name]
+            hashable_key = _make_hashable(key)
             try:
-                val = cache[key]
+                val = cache[hashable_key]
             except KeyError:
-                val = cache[key] = resolver(*key)
-            except TypeError:
-                # Unhashable key: cannot cache.
-                val = resolver(*key)
+                val = cache[hashable_key] = resolver(*key)
             return val
 
         # noinspection PyProtectedMember
@@ -749,3 +747,44 @@ def _select_one(
         assert False
 
     return val, ret_key
+
+
+def _make_hashable(key: Tuple[Any, ...]) -> Tuple[Any, ...]:
+    """
+    Ensure `key` is hashable.
+
+    This is achieved by turning into tuples the lists and dicts that may be
+    stored within `key`.
+    Note that dicts are not sorted, so that two dicts ordered differently will
+    lead to different resulting hashable keys.
+
+    :return: a hashable version of `key`.
+    """
+    # Hopefully it is already hashable and we have nothing to do!
+    try:
+        hash(key)
+    except TypeError:
+        pass
+    else:
+        return key
+
+    new_key: Optional[List[Any]] = None  # will store the new key
+    for idx, item in enumerate(key):
+        if item is None or isinstance(item, (int, float, bool, str)):
+            if new_key is not None:
+                new_key.append(item)
+            continue
+        if isinstance(item, list):
+            hashable_item = _make_hashable(tuple(item))
+        elif isinstance(item, tuple):
+            hashable_item = _make_hashable(item)
+        elif isinstance(item, dict):
+            hashable_item = _make_hashable(tuple((k, v) for k, v in item.items()))
+        else:
+            raise NotImplementedError(f"type {type(item)} cannot be made hashable")
+        if new_key is None:
+            # Initialize the new key from previous items.
+            new_key = list(key[0:idx])
+        new_key.append(hashable_item)
+    assert new_key is not None  # otherwise why did the first check failed?
+    return tuple(new_key)
