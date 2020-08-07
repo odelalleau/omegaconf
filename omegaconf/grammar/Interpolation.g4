@@ -63,8 +63,8 @@ fragment INT_UNSIGNED: DIGIT (('_')? DIGIT)*;  // 0, 7, 1_000
 INT: [+-]? INT_UNSIGNED;  // 3, -3, +3
 
 // ID (tpyically resolver names).
-fragment ALPHA: [a-zA-Z];
-ID : (ALPHA | '_') (ALPHA | DIGIT |'_')*;
+fragment ALPHA: [a-zA-Z_];
+ID: ALPHA (ALPHA | DIGIT)*;
 
 // Escaped characters.
 ESC: ('\\.' | '\\,' | '\\:' | '\\{' | '\\}' | '\\[' | '\\]' | '\\\'' | '\\"' | '\\ ' | '\\\t')+;
