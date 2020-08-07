@@ -25,7 +25,7 @@ class ANTLRCommand(Command):  # type: ignore
         build_dir = Path(__file__).parent.absolute()
         project_root = build_dir.parent
         for grammar in [
-            Path("omegaconf") / "grammar" / "Interpolation.g4",
+            "Interpolation.g4",
         ]:
             command = [
                 "java",
@@ -36,7 +36,7 @@ class ANTLRCommand(Command):  # type: ignore
                 str(project_root / "omegaconf" / "grammar" / "gen"),
                 "-Xexact-output-dir",
                 "-visitor",
-                str(project_root / grammar),
+                str(project_root / "omegaconf" / "grammar" / grammar),
             ]
 
             self.announce(
