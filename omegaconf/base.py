@@ -3,7 +3,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import partial
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, Iterator, Optional, Tuple, Type, Union
 
 from ._utils import ValueKind, format_and_raise, get_value_kind
 from .errors import ConfigKeyError, MissingMandatoryValue, UnsupportedInterpolationType
@@ -261,7 +261,11 @@ class Container(Node):
                 throw_on_missing=throw_on_missing,
                 throw_on_type_error=throw_on_resolution_failure,
             )
-            assert ret is None or isinstance(ret, Container)
+            if ret is not None and not isinstance(ret, Container):
+                raise ConfigKeyError(
+                    f"Error trying to access {key}: node `{'.'.join(split[0:i + 1])}` "
+                    f"is not a container and thus cannot contain `{split[i + 1]}``"
+                )
             root = ret
 
         if root is None:
@@ -290,9 +294,7 @@ class Container(Node):
         parent: Optional["Container"],
         value: "Node",
         key: Any,
-        parse_info: List[
-            Tuple[int, int, bool, Optional[InterpolationParser.RootContext]]
-        ],
+        parse_tree: InterpolationParser.RootContext,
         throw_on_missing: bool,
         throw_on_resolution_failure: bool,
     ) -> Optional["Node"]:
@@ -304,49 +306,32 @@ class Container(Node):
 
         from .nodes import StringNode
 
-        has_interpolation = any(
-            is_interpolation for _, _, is_interpolation, _ in parse_info
-        )
-        resolve_func = partial(
-            self._resolve_simple_interpolation,
-            key=key,
-            throw_on_missing=throw_on_missing,
-            throw_on_resolution_failure=throw_on_resolution_failure,
-        )
         value_str = value._value()
         assert isinstance(value_str, str), (type(value_str), value_str)
-        # Resolve all interpolations sequentially and concatenate the results (unless
-        # there is a single interpolation spanning the whole string, in which case we
-        # keep the single result as is).
-        visitor = ResolveInterpolationVisitor(resolve_func=resolve_func)
-        last_end = -1
-        results: List[Union[str, Optional[Node]]] = []
-        for start, end, is_interpolation, tree in parse_info:
-            assert end < len(value_str)
-            if start > last_end + 1:
-                results.append(value_str[last_end + 1 : start])
-            if is_interpolation:
-                # This is an interpolation: resolve it.
-                assert tree is not None
-                results.append(visitor.visit(tree))
-            else:
-                # This is a quoted string: get rid of the quotes.
-                results.append(value_str[start + 1 : end])
-            last_end = end
-        if last_end < len(value_str) - 1:
-            # Add the rest of the string after last interpolation.
-            results.append(value_str[last_end + 1 :])
-        if len(results) == 1 and has_interpolation:
-            rval = results[0]
-        else:
-            rval = StringNode(
-                value="".join(map(str, results)),
+
+        inter_visitor = ResolveInterpolationVisitor(
+            resolve_func=partial(
+                self._resolve_simple_interpolation,
+                key=key,
+                throw_on_missing=throw_on_missing,
+                throw_on_resolution_failure=throw_on_resolution_failure,
+            )
+        )
+
+        resolved = inter_visitor.visit(parse_tree)
+        if resolved is None:
+            return None
+        elif isinstance(resolved, str):
+            # Result is a string: create a new node to store it.
+            return StringNode(
+                value=resolved,
                 key=key,
                 parent=parent,
                 is_optional=value._metadata.optional,
             )
-        assert rval is None or isinstance(rval, Node)
-        return rval
+        else:
+            assert isinstance(resolved, Node)
+            return resolved
 
     def _resolve_simple_interpolation(
         self,
@@ -415,16 +400,17 @@ class Container(Node):
         throw_on_missing: bool,
         throw_on_resolution_failure: bool,
     ) -> Any:
-        value_kind, parse_info = get_value_kind(value=value, return_parse_info=True)
+        value_kind, parse_tree = get_value_kind(value=value, return_parse_tree=True)  # type: ignore
 
         if value_kind != ValueKind.INTERPOLATION:
             return value
 
+        assert parse_tree is not None
         return self._resolve_complex_interpolation(
             parent=parent,
             value=value,
             key=key,
-            parse_info=parse_info,
+            parse_tree=parse_tree,
             throw_on_missing=throw_on_missing,
             throw_on_resolution_failure=throw_on_resolution_failure,
         )

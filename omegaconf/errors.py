@@ -111,21 +111,31 @@ class InterpolationParseError(OmegaConfBaseException):
     """
 
 
-# The four parsing error classes below correspond to the four different kinds
-# of errors that may be reported by `antlr`.
-
-
 class InterpolationSyntaxError(InterpolationParseError):
-    pass
+    """
+    Thrown when a syntax error is detected while parsing an interpolation.
+    """
+
+
+class InterpolationTypeError(InterpolationParseError):
+    """
+    Thrown when there is a type mismatch during parsing of an interpolation.
+    """
 
 
 class InterpolationAmbiguityError(InterpolationParseError):
-    pass
+    """
+    From ANTLR only.
+    """
 
 
 class InterpolationAttemptingFullContextError(InterpolationParseError):
-    pass
+    """
+    From ANTLR only.
+    """
 
 
 class InterpolationContextSensitivityError(InterpolationParseError):
-    pass
+    """
+    From ANTLR only.
+    """
