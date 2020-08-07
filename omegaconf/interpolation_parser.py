@@ -364,11 +364,9 @@ def parse(value: str) -> InterpolationParser.RootContext:
     parser.removeErrorListeners()
     parser.addErrorListener(error_listener)
 
-    # The chunk of code below could be enabled in the future if we decide to
-    # switch to SLL prediction mode. Warning though, it is not currently tested!
-    if False:
-        from antlr4 import PredictionMode
-
-        parser._interp.predictionMode = PredictionMode.SLL
+    # The two lines below could be enabled in the future if we decide to switch
+    # to SLL prediction mode. Warning though, it has not been fully tested yet!
+    # from antlr4 import PredictionMode
+    # parser._interp.predictionMode = PredictionMode.SLL
 
     return parser.root()  # type: ignore
