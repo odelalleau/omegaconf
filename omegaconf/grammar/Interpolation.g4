@@ -1,54 +1,50 @@
-// Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-
 // Regenerate parser by running 'python setup.py antlr' at project root.
-// If you make changes here be sure to update the documentation (and update the grammar in command_line_syntax.md)
+
+// Maintenance guidelines when modifying this grammar:
+// - Make sure that `OTHER_CHARS` is updated to exclude any new character you may
+//   handle in either implicit or explicit lexer tokens.
+// - To test the parsing abilities of the modified grammer before writing all the
+//   support visitor code, change the test
+//        `tests/test_interpolation.py::test_all_interpolations`
+//   by setting `dbg_test_access_only = True`, and run it. You will also probably
+//   need to comment / hijack the code accesssing the visitor. Tests that expect
+//   errors raised from the visitor will obviously fail.
+// - Keep up-to-date the comments in the visitor (in `interpolation_parser.py`)
+//   that contain grammar excerpts (within each `visit...()` method).
+// - Remember to update the documentation (including the tutorial notebook)
+
+// Note that this grammar does *not* attempt to parse floats, and instead relies on
+// the visitor to cast strings as floats as needed. This helps keep the grammar simple.
+
 grammar Interpolation;
 
-// *** Parser rules ***
-
-// High-level.
-root: item EOF;
-item: (WS)* item_nows (WS)*;
-item_nows: primitive | interpolation | list_of_items | dict_of_items;
+// Top-level: we allow pretty much everything with interpolations in the middle
+// (including strings that contain no interpolations, to un-escape e.g. "a=$\{b\}")
+root: toplevel EOF;
+toplevel: toplevel_str | (toplevel_str? (interpolation toplevel_str?)+);
+toplevel_str: (NULL | BOOL | INT | ID | ESC | WS | OTHER_CHARS | DOT | ',' | ':' | '{' | '}' | '[' | ']' | '\'' | '"')+;
 
 // Interpolations.
-interpolation: simple_interpolation | string_interpolation;
-// Simple interpolations are of the form ${..}
-simple_interpolation: direct_interpolation | resolver_interpolation;
-direct_interpolation: '${' id_maybe_interpolated ('.' id_maybe_interpolated)* '}';  // ${foo}, {foo.bar}
-resolver_interpolation: '${' id_maybe_interpolated ':' sequence_of_items '}';  // ${foo:x,y,z}
-id_maybe_interpolated: key;  // TODO simplify
-// String interpolations combine multiple components into a single string.
-// We allow additional characters that can be concatenated without being quoted, in addition to
-// those in `STR_NO_DIGIT`. This allows for instance using `http://domain.com:${port}`.
-// Note that these additional characters cannot be added to `STR_NO_DIGIT` as otherwise
-// some "." and ":" used in interpolations would be "consumed" by the lexer.
-other_char: '.' | ':';
-string_interpolation: string_interpolation_no_other | string_interpolation_other_left | string_interpolation_other_right;
-// The "no other" string interpolation does not contain any character from `other_char`.
-// It is used to extract identifiers, so that we can use for instance `${foo_${bar}:arg}`.
-// Note that we allow non-string primitive types so as to deal with edge cases like `null${foo}`.
-string_interpolation_no_other: primitive_or_simple (primitive_or_simple)+;
-// The "other left and "other right" string interpolations are those containing characters
-// from `other_char` (respectively starting and not starting with such a character).
-string_interpolation_other_left: ((other_char)+ (primitive_or_simple)+)+ (other_char)*;
-string_interpolation_other_right: ((primitive_or_simple)+ (other_char)+)+ (primitive_or_simple)*;
-primitive_or_simple: primitive | simple_interpolation;
+interpolation: interpolation_resolver | interpolation_node;
+interpolation_resolver: '${' WS? (interpolation | NULL | BOOL | ID) WS? ':' sequence? '}';
+interpolation_node: '${' WS? config_key (DOT config_key)* WS? '}';
+config_key: interpolation | (NULL | BOOL | INT | ID | ESC | OTHER_CHARS)+;
 
-// Containers.
-list_of_items: '[' sequence_of_items ']';
-sequence_of_items: (item (',' item)*)?;
-dict_of_items: '{' (key_value (',' key_value)*)? '}';
-key_value: (WS)* key (WS)* ':' item;
-key: primitive | simple_interpolation | string_interpolation_no_other;
+// Data structures.
+sequence: item (',' item)*;
+bracketed_list: '[' sequence? ']';
+dictionary: '{' (key_value (',' key_value)*)? '}';
+key_value: item ':' item;
 
-// Primitive types.
-primitive: boolean | null | integer | floating_point | string;
-integer: INT;
-string: ID | BASIC_STR | QUOTED_STR;
-floating_point: FLOAT;
-boolean: BOOL;
-null: NULL;
+// Individual items used as resolver arguments or within data structures.
+item: WS? item_no_outer_ws WS?;
+item_no_outer_ws: interpolation | dictionary | bracketed_list
+                // Allow adding whitespaces within quotes for quotable items.
+                | item_quotable | '\'' WS? item_quotable WS? '\'' | '"' WS? item_quotable WS? '"';
+item_quotable: NULL | BOOL | INT | ID | ESC | OTHER_CHARS | DOT  // single primitive,
+    | ((NULL | BOOL | INT | ID | ESC | OTHER_CHARS | DOT)        // or concatenation of multiple primitives
+       (NULL | BOOL | INT | ID | ESC | OTHER_CHARS | WS | DOT)*  // (possibly with spaces in the middle)
+       (NULL | BOOL | INT | ID | ESC | OTHER_CHARS | DOT));
 
 // *** Lexer rules ***
 
@@ -59,34 +55,31 @@ BOOL:
     | [Ff][Aa][Ll][Ss][Ee]; // false
 
 // Integers.
-// Note: we disallow integers starting with '0' to minimize potential typos, even
-// though calling `int()` on such a representation works, and Python also accepts
-// them in exponents (ex: 1.5e007).
+// Note: we allow integers starting with zero(s), as calling `int()` on such a
+// representation works, Python accepts them in exponents, and it allows parsing
+// of 1.000000001 into two integers instead of multiple characters.
 fragment DIGIT: [0-9];
-fragment NZ_DIGIT: [1-9];
-fragment INT_UNSIGNED: '0' | (NZ_DIGIT (('_')? DIGIT)*);  // 0, 7, 1_000
+fragment INT_UNSIGNED: DIGIT (('_')? DIGIT)*;  // 0, 7, 1_000
 INT: [+-]? INT_UNSIGNED;  // 3, -3, +3
 
-// Floats.
-fragment FRACTION: '.' INT_UNSIGNED;
-fragment POINT_FLOAT: INT_UNSIGNED? FRACTION | INT_UNSIGNED '.';  // .1, 0.1, 0.
-fragment EXPONENT: [eE] [+-]? INT; // e5, E-3
-fragment EXPONENT_FLOAT: (INT_UNSIGNED | POINT_FLOAT) EXPONENT;
-FLOAT: [+-]? (POINT_FLOAT | EXPONENT_FLOAT | [Ii][Nn][Ff] | [Nn][Aa][Nn]);
+// ID (tpyically resolver names).
+fragment ALPHA: [a-zA-Z];
+ID : (ALPHA | '_') (ALPHA | DIGIT |'_')*;
 
-// Strings.
-fragment ALPHA_: [a-zA-Z] | '_';
-fragment ESC_SPACE: '\\ ';
-fragment ESC_COMMA: '\\,';
-fragment ESC_OUTSIDE: ESC_SPACE | ESC_COMMA;
-ID : ALPHA_ (ALPHA_ | DIGIT)*;  // foo, bar2
-// Basic strings (= non quoted) are not allowed to start with a digit, so as to
-// minimize the risk of typos (ex: 1__000).
-// foo, foo_bar, foo/2, foo\ 2, \,foo\,-bar\,baz\, (TODO: more examples)
-fragment STR_NO_DIGIT: ALPHA_ | '/' | '-' | '%' | '#' | '?' | '&' | '@' | ESC_COMMA | ESC_SPACE;
-fragment STR_TWO_PLUS_CHARS: STR_NO_DIGIT (DIGIT | STR_NO_DIGIT | ' ' | '\t')* (DIGIT | STR_NO_DIGIT)+;
-BASIC_STR: STR_NO_DIGIT | STR_TWO_PLUS_CHARS;
-QUOTED_STR:
-      '\'' ('\\\''|.)*? '\''  // Single quoted string. Can contain escaped single quote.
-    | '"' ('\\"'|.)*? '"' ;   // Double quoted string. can contain escaped double quote.
-WS: (' ' | '\t');
+// Escaped characters.
+ESC: ('\\.' | '\\,' | '\\:' | '\\{' | '\\}' | '\\[' | '\\]' | '\\\'' | '\\"' | '\\ ' | '\\\t')+;
+
+// Whitespaces.
+WS: (' ' | '\t')+;
+
+// Dot character.
+DOT: '.';
+
+// Finally, match remaining characters (grouping together those that are not used above).
+// Note that:
+//  - `$` and `\` are parsed alone (=ungrouped) because otherwise e.g. '$\{' may not be
+//    properly recognized as an escaped interpolation.
+//  -  `+` and `-` are included in OTHER_CHARS: this does not break the parsing
+//     of INT because if they are concatenated with any other character from OTHER_CHARS
+//     then they cannot be part of an INT.
+OTHER_CHARS: [$\\] | (~[a-zA-Z_$\\0-9.,:{}[\]'" \t])+;

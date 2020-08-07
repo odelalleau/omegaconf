@@ -5,13 +5,14 @@ from typing import (
     Callable,
     Dict,
     Generator,
+    Iterable,
     List,
     Optional,
     Tuple,
     Union,
 )
 
-from antlr4 import CommonTokenStream, InputStream, ParserRuleContext, TerminalNode
+from antlr4 import CommonTokenStream, InputStream, TerminalNode
 from antlr4.error.ErrorListener import ErrorListener
 
 from .errors import (
@@ -19,6 +20,7 @@ from .errors import (
     InterpolationAttemptingFullContextError,
     InterpolationContextSensitivityError,
     InterpolationSyntaxError,
+    InterpolationTypeError,
 )
 
 if TYPE_CHECKING:
@@ -71,6 +73,10 @@ class OmegaConfErrorListener(ErrorListener):  # type: ignore
         conflictingAlts: Any,
         configs: Any,
     ) -> None:
+        # Note: for now we raise an error to be safe. However this is mostly a
+        # performance warning, so in the future this may be relaxed if we need
+        # to change the grammar in such a way that this warning cannot be
+        # avoided (another option would be to switch to SLL parsing mode).
         raise InterpolationAttemptingFullContextError()
 
     def reportContextSensitivity(
@@ -98,63 +104,55 @@ class ResolveInterpolationVisitor(InterpolationVisitor):
         super().__init__(**kw)
         self._resolve_func = resolve_func
 
-    def _resolve_string_interpolation(self, ctx: ParserRuleContext) -> str:
-        """Helper function to resolve all variants of string interpolations"""
-        assert ctx.getChildCount() >= 2
-        rval = "".join(self.visitChildren(ctx))
-        return rval
+    def aggregateResult(self, aggregate: List[Any], nextResult: Any) -> List[Any]:
+        aggregate.append(nextResult)
+        return aggregate
 
-    def visitBoolean(self, ctx: InterpolationParser.BooleanContext) -> bool:
-        assert ctx.getChildCount() == 1  # BOOL
-        child = ctx.getChild(0)
-        assert (
-            isinstance(child, TerminalNode)
-            and child.symbol.type == InterpolationLexer.BOOL
-            and child.symbol.text.lower() in ["true", "false"]
-        )
-        return bool(child.symbol.text.lower() == "true")
+    def defaultResult(self) -> List[Any]:
+        return []
 
-    def visitDirect_interpolation(
-        self, ctx: InterpolationParser.Direct_interpolationContext
-    ) -> Optional["Node"]:
-        # '${' id_maybe_interpolated ('.' id_maybe_interpolated)* '}'
-        assert ctx.getChildCount() >= 3
-        res = self.visitChildren(ctx)[1:-1:2]  # `:2` to skip dots
-        assert all(isinstance(x, str) for x in res), res
-        return self._resolve_func(inter_type="str:", inter_key=(".".join(res),))
+    def visitBracketed_list(
+        self, ctx: InterpolationParser.Bracketed_listContext
+    ) -> List[Any]:
+        assert ctx.getChildCount() in (2, 3)  # '[' sequence? ']'
+        if ctx.getChildCount() == 2:
+            return []
+        sequence = ctx.getChild(1)
+        assert isinstance(sequence, InterpolationParser.SequenceContext)
+        return list(val for val, _ in self.visitSequence(sequence))  # ignore raw text
 
-    def visitFloating_point(
-        self, ctx: InterpolationParser.Floating_pointContext
-    ) -> float:
-        assert ctx.getChildCount() == 1  # FLOAT
-        child = ctx.getChild(0)
-        assert (
-            isinstance(child, TerminalNode)
-            and child.symbol.type == InterpolationLexer.FLOAT
-        )
-        return float(child.symbol.text)
+    def visitConfig_key(self, ctx: InterpolationParser.Config_keyContext) -> str:
+        from ._utils import _get_value
 
-    def visitId_maybe_interpolated(
-        self, ctx: InterpolationParser.Id_maybe_interpolatedContext
-    ) -> str:
-        assert ctx.getChildCount() == 1  # key
-        # Identifiers must be strings.
-        return str(self.visitChildren(ctx)[0])
+        # interpolation | (NULL | BOOL | INT | ID | ESC | OTHER_CHARS)+
+        if ctx.getChildCount() == 1 and isinstance(
+            ctx.getChild(0), InterpolationParser.InterpolationContext
+        ):
+            res = _get_value(self.visitInterpolation(ctx.getChild(0)))
+            if not isinstance(res, str):
+                raise InterpolationTypeError(
+                    f"The following interpolation is used to denote a config key and "
+                    f"thus should return a string, but instead returned `{res}` of "
+                    f"type `{type(res)}`: {ctx.getChild(0).getText()}"
+                )
+            return res
+        return self._unescape(ctx.getChildren())
 
-    def visitInteger(self, ctx: InterpolationParser.IntegerContext) -> int:
-        assert ctx.getChildCount() == 1  # INT
-        child = ctx.getChild(0)
-        assert (
-            isinstance(child, TerminalNode)
-            and child.symbol.type == InterpolationLexer.INT
-        )
-        return int(child.symbol.text)
+    def visitDictionary(
+        self, ctx: InterpolationParser.DictionaryContext
+    ) -> Dict[Any, Any]:
+        assert ctx.getChildCount() >= 2  # '{' (key_value (',' key_value)*)? '}'
+        ret = {}
+        for i in range(1, ctx.getChildCount() - 1, 2):
+            key, value = self.visitKey_value(ctx.getChild(i))
+            ret[key] = value
+        return ret
 
     def visitItem(self, ctx: InterpolationParser.ItemContext) -> Any:
-        assert ctx.getChildCount() >= 1  # (WS)* item_nows (WS)*
+        # WS? item_no_outer_ws WS?
         for child in ctx.getChildren():
-            if isinstance(child, InterpolationParser.Item_nowsContext):
-                return self.visitItem_nows(child)
+            if isinstance(child, InterpolationParser.Item_no_outer_wsContext):
+                return self.visitItem_no_outer_ws(child)
             else:
                 assert (
                     isinstance(child, TerminalNode)
@@ -162,64 +160,141 @@ class ResolveInterpolationVisitor(InterpolationVisitor):
                 )
         assert False
 
-    def visitItem_nows(self, ctx: InterpolationParser.Item_nowsContext) -> Any:
-        # primitive | interpolation | list_of_items | dict_of_items
-        assert ctx.getChildCount() == 1
-        return self.visitChildren(ctx)[0]
+    def visitItem_no_outer_ws(
+        self, ctx: InterpolationParser.Item_no_outer_wsContext
+    ) -> Any:
+        if ctx.getChildCount() == 1:
+            # interpolation | dictionary | bracketed_list | item_quotable
+            return self.visit(ctx.getChild(0))
+        # Quoted item: '\'' WS? item_quotable WS? '\'' | '"' WS? item_quotable WS? '"'
+        n_children = ctx.getChildCount()
+        assert n_children >= 3
+        res = []
+        for child_idx, child in enumerate(ctx.getChildren()):
+            if child_idx == 0 or child_idx == n_children - 1:
+                assert isinstance(child, TerminalNode)  # start / end quotes
+            elif isinstance(child, TerminalNode):
+                assert (
+                    child.symbol.type == InterpolationLexer.WS
+                )  # leading / trailing whitespace
+                res.append(child)
+            else:
+                assert isinstance(child, InterpolationParser.Item_quotableContext)
+                res.extend(child.getChildren())
+        return self._unescape(res)
 
-    def visitInterpolation(self, ctx: InterpolationParser.InterpolationContext) -> Any:
-        assert ctx.getChildCount() == 1  # simple_interpolation | string_interpolation
-        return self.visitChildren(ctx)[0]
+    def visitItem_quotable(self, ctx: InterpolationParser.Item_quotableContext) -> Any:
+        if ctx.getChildCount() == 1:
+            # NULL | BOOL | INT | ID | ESC | OTHER_CHARS | DOT
+            child = ctx.getChild(0)
+            assert isinstance(child, TerminalNode)
+            # Parse primitive types.
+            if child.symbol.type == InterpolationLexer.NULL:
+                return None
+            elif child.symbol.type == InterpolationLexer.BOOL:
+                return child.symbol.text.lower() == "true"
+            elif child.symbol.type == InterpolationLexer.INT:
+                return int(child.symbol.text)
+            elif child.symbol.type == InterpolationLexer.ID:
+                return self._maybe_float(child.symbol.text)  # could be e.g. nan / inf
+            elif child.symbol.type == InterpolationLexer.ESC:
+                return child.symbol.text[1::2]
+            elif child.symbol.type in [
+                InterpolationLexer.OTHER_CHARS,
+                InterpolationLexer.DOT,
+            ]:
+                return child.symbol.text
+            assert False
+        # Concatenation of the above (plus potential whitespaces in the middle):
+        # first check if it is a float, otherwise un-escape it.
+        ret = self._maybe_float(ctx.getText())
+        return ret if isinstance(ret, float) else self._unescape(ctx.getChildren())
 
-    def visitKey(self, ctx: InterpolationParser.KeyContext) -> Any:
-        # primitive | simple_interpolation | string_interpolation_no_other
-        assert ctx.getChildCount() == 1
-        return self.visitChildren(ctx)[0]
+    def visitInterpolation(
+        self, ctx: InterpolationParser.InterpolationContext
+    ) -> Optional["Node"]:
+        from .base import Node  # noqa F811
 
-    def visitOther_char(self, ctx: InterpolationParser.Other_charContext) -> str:
-        assert ctx.getChildCount() == 1  # '.' | ':'
-        child = ctx.getChild(0)
-        assert isinstance(child, TerminalNode)
-        ret = child.getText()
-        assert isinstance(ret, str)
+        assert ctx.getChildCount() == 1  # interpolation_resolver | interpolation_node
+        ret = self.visit(ctx.getChild(0))
+        assert ret is None or isinstance(ret, Node)
         return ret
 
-    def visitPrimitive(
-        self, ctx: InterpolationParser.PrimitiveContext
-    ) -> Optional[Union[bool, int, float, str]]:
-        # boolean | null | integer | floating_point | string
-        assert ctx.getChildCount() == 1
-        ret = self.visitChildren(ctx)[0]
-        assert ret is None or isinstance(ret, (bool, int, float, str))
-        return ret
+    def visitInterpolation_node(
+        self, ctx: InterpolationParser.Interpolation_nodeContext
+    ) -> Optional["Node"]:
+        assert ctx.getChildCount() >= 3  # '${' WS? config_key (DOT config_key)* WS? '}'
+        res = []
+        for child in ctx.getChildren():
+            if isinstance(child, InterpolationParser.Config_keyContext):
+                res.append(self.visitConfig_key(child))
+            else:
+                assert isinstance(child, TerminalNode)
+        return self._resolve_func(inter_type="str:", inter_key=(".".join(res),))
 
-    def visitResolver_interpolation(
-        self, ctx: InterpolationParser.Resolver_interpolationContext
+    def visitInterpolation_resolver(
+        self, ctx: InterpolationParser.Interpolation_resolverContext
     ) -> Optional["Node"]:
         from ._utils import _get_value
 
-        # '${' id_maybe_interpolated ':' sequence_of_items '}'
-        assert ctx.getChildCount() == 5
-        inter_type = str(self.visit(ctx.getChild(1))) + ":"
+        # '${' WS? (interpolation | NULL | BOOL | ID) WS? ':' sequence? '}'
+
+        resolver_name = None
         inter_key = []
         inputs_str = []
-        for val, txt in self.visitSequence_of_items(ctx.getChild(3)):
-            inter_key.append(_get_value(val))
-            inputs_str.append(txt)
+        for child in ctx.getChildren():
+            if isinstance(child, TerminalNode) and child.symbol.type in [
+                InterpolationLexer.NULL,
+                InterpolationLexer.BOOL,
+                InterpolationLexer.ID,
+            ]:
+                assert resolver_name is None
+                resolver_name = child.symbol.text
+
+            elif isinstance(child, InterpolationParser.InterpolationContext):
+                assert resolver_name is None
+                resolver_name = _get_value(self.visitInterpolation(child))
+                if not isinstance(resolver_name, str):
+                    raise InterpolationTypeError(
+                        f"The name of a resolver must be a string, but the interpolation "
+                        f"{child.getText()} resolved to `{resolver_name}` which is of type "
+                        f"{type(resolver_name)}"
+                    )
+            elif isinstance(child, InterpolationParser.SequenceContext):
+                assert resolver_name is not None
+                for val, txt in self.visitSequence(child):
+                    inter_key.append(_get_value(val))
+                    inputs_str.append(txt)
+            else:
+                assert isinstance(child, TerminalNode)
+
+        assert resolver_name is not None
         return self._resolve_func(
-            inter_type=inter_type,
+            inter_type=resolver_name + ":",
             inter_key=tuple(inter_key),
             inputs_str=tuple(inputs_str),
         )
 
-    def visitRoot(self, ctx: InterpolationParser.RootContext) -> Any:
-        assert ctx.getChildCount() == 2  # item EOF
-        return self.visitChildren(ctx)[0]
+    def visitKey_value(
+        self, ctx: InterpolationParser.Key_valueContext
+    ) -> Tuple[Any, Any]:
+        assert ctx.getChildCount() == 3  # key_value: item ':' item
+        key = self.visitItem(ctx.getChild(0))
+        value = self.visitItem(ctx.getChild(2))
+        return key, value
 
-    def visitSequence_of_items(
-        self, ctx: InterpolationParser.Sequence_of_itemsContext
+    def visitRoot(
+        self, ctx: InterpolationParser.RootContext
+    ) -> Union[str, Optional["Node"]]:
+        assert ctx.getChildCount() == 2  # toplevel EOF
+        toplevel = ctx.getChild(0)
+        assert isinstance(toplevel, InterpolationParser.ToplevelContext)
+        return self.visitToplevel(toplevel)
+
+    def visitSequence(
+        self, ctx: InterpolationParser.SequenceContext
     ) -> Generator[Any, None, None]:
-        # (item (',' item)*)?
+        assert ctx.getChildCount() >= 1  # item (',' item)*
         for i, child in enumerate(ctx.getChildren()):
             if i % 2 == 0:
                 assert isinstance(child, InterpolationParser.ItemContext)
@@ -229,132 +304,57 @@ class ResolveInterpolationVisitor(InterpolationVisitor):
                 # the value to string later as for instance `null` would become "None".
                 yield self.visitItem(child), child.getText()
             else:
-                assert isinstance(child, TerminalNode) and child.getText() == ","
-
-    def visitSimple_interpolation(
-        self, ctx: InterpolationParser.Simple_interpolationContext
-    ) -> Optional["Node"]:
-        from .base import Node  # noqa F811
-
-        assert ctx.getChildCount() == 1  # direct_interpolation | resolver_interpolation
-        ret = self.visitChildren(ctx)[0]
-        assert ret is None or isinstance(ret, Node)
-        return ret
-
-    def visitString(self, ctx: InterpolationParser.StringContext) -> str:
-        assert ctx.getChildCount() == 1  # ID | BASIC_STR | QUOTED_STR
-        child = ctx.getChild(0)
-        assert isinstance(child, TerminalNode)
-        text, ptype = child.symbol.text, child.symbol.type
-        assert isinstance(text, str)
-        if ptype == InterpolationLexer.ID:
-            return text
-        elif ptype == InterpolationLexer.BASIC_STR:
-            # Unquote commas & space.
-            return text.replace("\\ ", " ").replace("\\,", ",")
-        else:
-            assert ptype == InterpolationLexer.QUOTED_STR, ptype
-            return text[1:-1]
-
-    def visitString_interpolation(
-        self, ctx: InterpolationParser.String_interpolationContext
-    ) -> str:
-        # string_interpolation_no_other | string_interpolation_other_left | string_interpolation_other_right
-        assert ctx.getChildCount() == 1
-        ret = self.visitChildren(ctx)[0]
-        assert isinstance(ret, str)
-        return ret
-
-    def visitString_interpolation_no_other(
-        self, ctx: InterpolationParser.String_interpolation_no_otherContext
-    ) -> str:
-        return self._resolve_string_interpolation(ctx)
-
-    def visitString_interpolation_other_right(
-        self, ctx: InterpolationParser.String_interpolation_other_rightContext
-    ) -> str:
-        return self._resolve_string_interpolation(ctx)
-
-    def visitString_interpolation_other_left(
-        self, ctx: InterpolationParser.String_interpolation_other_leftContext
-    ) -> str:
-        return self._resolve_string_interpolation(ctx)
-
-    def aggregateResult(self, aggregate: List[Any], nextResult: Any) -> List[Any]:
-        aggregate.append(nextResult)
-        return aggregate
-
-    def defaultResult(self) -> List[Any]:
-        return []
-
-    def visitPrimitive_or_simple(
-        self, ctx: InterpolationParser.Primitive_or_simpleContext
-    ) -> str:
-
-        assert ctx.getChildCount() == 1  # primitive | simple_interpolation
-        child = ctx.getChild(0)
-        child_val = self.visit(child)
-        if isinstance(child_val, str):
-            # Result is a string: we can re-use it directly.
-            return child_val
-        elif isinstance(child, InterpolationParser.PrimitiveContext):
-            # Here we want to keep the original string representation when possible,
-            # to avoid situations where we might e.g. transform "true" into "True".
-            ret = child.getText()
-            assert isinstance(ret, str)
-            return ret
-        else:
-            # Anything else: convert to string.
-            return str(child_val)
-
-    def visitList_of_items(
-        self, ctx: InterpolationParser.List_of_itemsContext
-    ) -> List[Any]:
-        assert ctx.getChildCount() == 3  # '[' sequence_of_items ']'
-        return list(val for val, txt in self.visit(ctx.getChild(1)))
-
-    def visitDict_of_items(
-        self, ctx: InterpolationParser.Dict_of_itemsContext
-    ) -> Dict[Any, Any]:
-        # '{' (key_value (',' key_value)*)? '}';
-        assert ctx.getChildCount() >= 2
-        ret = {}
-        for i in range(1, ctx.getChildCount() - 1, 2):
-            key, value = self.visit(ctx.getChild(i))
-            ret[key] = value
-        return ret
-
-    def visitKey_value(
-        self, ctx: InterpolationParser.Key_valueContext
-    ) -> Tuple[Any, Any]:
-        # key_value: (WS)* key (WS)* ':' item;
-        found_key = False
-        key = None
-        for child in ctx.getChildren():
-            if isinstance(child, InterpolationParser.KeyContext):
-                assert not found_key
-                key = self.visitKey(child)
-                found_key = True
-            elif isinstance(child, InterpolationParser.ItemContext):
-                assert found_key
-                return key, self.visitItem(child)
-            else:
                 assert isinstance(child, TerminalNode)
-        assert False
 
-    def visitNull(self, ctx: InterpolationParser.NullContext) -> None:
-        assert ctx.getChildCount() == 1  # NULL
-        child = ctx.getChild(0)
-        assert (
-            isinstance(child, TerminalNode)
-            and child.symbol.type == InterpolationLexer.NULL
-        )
-        return None
+    def visitToplevel(
+        self, ctx: InterpolationParser.ToplevelContext
+    ) -> Union[str, Optional["Node"]]:
+        # toplevel_str | (toplevel_str? (interpolation toplevel_str?)+)
+        vals = self.visitChildren(ctx)
+        if len(vals) == 1 and isinstance(
+            ctx.getChild(0), InterpolationParser.InterpolationContext
+        ):
+            from .base import Node  # noqa F811
+
+            # from ._utils import _get_value
+
+            # Single interpolation: return the resulting node "as is".
+            ret = vals[0]
+            assert ret is None or isinstance(ret, Node), ret
+            return ret
+        # Concatenation of multiple components.
+        return "".join(map(str, vals))
+
+    def visitToplevel_str(self, ctx: InterpolationParser.Toplevel_strContext) -> str:
+        # Just un-escape top-level characters.
+        return self._unescape(ctx.getChildren())
+
+    def _maybe_float(self, some_str: str) -> Union[float, str]:
+        """
+        Attempt to cast `some_str` as a float.
+        """
+        try:
+            return float(some_str)
+        except ValueError:
+            return some_str
+
+    def _unescape(self, seq: Iterable[TerminalNode]) -> str:
+        """
+        Concatenate all symbols in `seq`, unescaping those that need it.
+        """
+        chrs = []
+        for node in seq:
+            s = node.symbol
+            if s.type == InterpolationLexer.ESC:
+                chrs.append(s.text[1::2])
+            else:
+                chrs.append(s.text)
+        return "".join(chrs)
 
 
 def parse(value: str) -> InterpolationParser.RootContext:
     """
-    Parse interpolated string `value` (return the parse tree).
+    Parse interpolated string `value` (and return the parse tree).
     """
     error_listener = OmegaConfErrorListener()
     istream = InputStream(value)
@@ -365,4 +365,12 @@ def parse(value: str) -> InterpolationParser.RootContext:
     parser = InterpolationParser(stream)
     parser.removeErrorListeners()
     parser.addErrorListener(error_listener)
+
+    # The chunk of code below could be enabled in the future if we decide to
+    # switch to SLL prediction mode. Warning though, it is not currently tested!
+    if False:
+        from antlr4 import PredictionMode
+
+        parser._interp.predictionMode = PredictionMode.SLL
+
     return parser.root()  # type: ignore

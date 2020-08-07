@@ -66,8 +66,10 @@ from .nodes import (
 
 MISSING: Any = "???"
 
-# A marker used in OmegaConf.create() to differentiate between creating an empty {} DictConfig
-# and creating a DictConfig with None content.
+# A marker used:
+# -  in OmegaConf.create() to differentiate between creating an empty {} DictConfig
+#    and creating a DictConfig with None content
+# - in env() to detect between no default value vs a default value set to None
 _EMPTY_MARKER_ = object()
 
 
@@ -113,12 +115,12 @@ Resolver = Union[Resolver0, Resolver1, Resolver2, Resolver3]
 
 
 def register_default_resolvers() -> None:
-    def env(key: str, default: Optional[Any] = None) -> Any:
+    def env(key: str, default: Any = _EMPTY_MARKER_) -> Any:
         try:
             return decode_primitive(os.environ[key])
         except KeyError:
-            if default is not None:
-                return decode_primitive(str(default))
+            if default is not _EMPTY_MARKER_:
+                return default
             else:
                 raise ValidationError(f"Environment variable '{key}' not found")
 
