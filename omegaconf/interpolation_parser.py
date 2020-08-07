@@ -26,7 +26,6 @@ from .errors import (
 if TYPE_CHECKING:
     from .base import Node  # noqa F401
 
-
 try:
     from omegaconf.grammar.gen.InterpolationLexer import InterpolationLexer
     from omegaconf.grammar.gen.InterpolationParser import InterpolationParser
@@ -317,7 +316,6 @@ class ResolveInterpolationVisitor(InterpolationVisitor):
             from .base import Node  # noqa F811
 
             # from ._utils import _get_value
-
             # Single interpolation: return the resulting node "as is".
             ret = vals[0]
             assert ret is None or isinstance(ret, Node), ret
