@@ -594,16 +594,8 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("unquoted_other_char", f"${{identity:{chr(200)}}}", chr(200)),
     ("unquoted_dot", "${identity:.}", "."),
     ("unquoted_esc", r"${identity:\{}", "{"),
-    (
-        "quoted_str_single",
-        "${identity:'!@#$%^&*()[]:.,'}",
-        (True, InterpolationSyntaxError),
-    ),
-    (
-        "quoted_str_double",
-        '${identity:"!@#$%^&*()[]:.,"}',
-        (True, InterpolationSyntaxError),
-    ),
+    ("quoted_str_single", "${identity:'!@#$%^&*()[]:.,\"'}", '!@#$%^&*()[]:.,"',),
+    ("quoted_str_double", '${identity:"!@#$%^&*()[]:.,\'"}', "!@#$%^&*()[]:.,'",),
     ("quote_outer_ws_single", "${identity: '  a \t'}", "  a \t"),
     ("int", "${identity:123}", 123),
     ("int_pos", "${identity:+123}", 123),
@@ -647,8 +639,8 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     # Legal vs illegal characters in non-quoted strings within interpolations.
     (
         "str_legal_noquote",
-        r"${identity:a/-%#?&@,\ \.\,\:b\{\}\[\]  \ }",
-        ["a/-%#?&@", " .,:b{}[]   "],
+        r"${identity:a./-%#?&@,\ \,\:b\{\}\[\]  \ }",
+        ["a./-%#?&@", " ,:b{}[]   "],
     ),
     ("str_equal_noquote", "${identity:a,=b}", ["a", "=b"],),
     ("str_equal_quoted", "${identity:a,'=b'}", ["a", "=b"]),
@@ -674,18 +666,15 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_top_middle_quote_single", "I'd like ${prim_str}", "I'd like hi"),
     ("str_top_middle_quote_double", 'I"d like ${prim_str}', 'I"d like hi'),
     ("str_top_middle_quotes_single", "I like '${prim_str}'", "I like 'hi'"),
-    (
-        "str_top_quoted_inter",
-        r"Not an interpolation: $\{prim_str\}",
-        r"Not an interpolation: ${prim_str}",
-    ),
-    (
-        "str_top_quoted_inter_error",
-        r"Missing escape: \${prim_str}",
-        r"Missing escape: \hi",
-    ),
-    ("str_top_quoted_braces", r"Braced: \{${prim_str}\}", "Braced: {hi}",),
-    ("str_concat_interpolations", "${true}${float}", "True1.1"),
+    ("str_top_esc_inter", r"Esc: \${prim_str}", "Esc: ${prim_str}",),
+    ("str_top_esc_inter_wrong", r"Wrong: $\{prim_str\}", r"Wrong: $\{prim_str\}",),
+    ("str_top_esc_backslash", r"Esc: \\${prim_str}", r"Esc: \hi",),
+    ("str_top_quoted_braces", r"Braced: \{${prim_str}\}", r"Braced: \{hi\}",),
+    ("str_top_leading_dollars", r"$$${prim_str}", "$$hi"),
+    ("str_top_trailing_dollars", r"${prim_str}$$$$", "hi$$$$"),
+    ("str_top_leading_escapes", r"\\\\\${prim_str}", r"\\${prim_str}"),
+    ("str_top_trailing_escapes", "${prim_str}" + "\\" * 5, "hi" + "\\" * 3),
+    ("str_top_concat_interpolations", "${true}${float}", "True1.1"),
     # String interpolations (within interpolations).
     (
         "str_no_other",
@@ -710,6 +699,21 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_quoted_int", "${identity:'123'}", "123"),
     ("str_quoted_null", "${identity:'null'}", "null"),
     ("str_quoted_bool", "${identity:'truE', \"FalSe\"}", ["truE", "FalSe"]),
+    ("str_quoted_inter", "${identity:'${null}'}", "None"),
+    (
+        "str_quoted_inter_nested",
+        "${identity:'${identity:\"L=${prim_list}\"}'}",
+        "L=[-1, 'a', 1.1]",
+    ),
+    ("str_esc_inter", r"${identity:\${foo\}}", "${foo}"),
+    ("str_esc_brace", r"${identity:$\{foo\}}", "${foo}"),
+    ("str_esc_backslash", r"${identity:\\}", "\\"),
+    ("str_esc_many", r"${identity:\\,\,\{,\null}", ["\\", ",{", r"\null"]),
+    ("str_esc_mixed", r"${identity:\,\:\\\{foo\}\[\]}", r",:\{foo}[]"),
+    ("str_esc_quoted_single_1", r"${identity:'ab\'cd\'\'${prim_str}'}", "ab'cd''hi"),
+    ("str_esc_quoted_single_2", "${identity:'\"\\\\\\${foo}\\ '}", r'"\${foo}\ '),
+    ("str_esc_quoted_double", r'${identity:"ab\"cd\"\"${prim_str}"}', 'ab"cd""hi'),
+    ("str_esc_quoted_double_2", '${identity:"\'\\\\\\${foo}\\ "}', r"'\${foo}\ "),
     # Structured interpolations.
     ("list", "${identity:[0, 1]}", [0, 1]),
     (
@@ -720,7 +724,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("empties", "${identity:[],{}}", [[], {}]),
     (
         "structured_mixed",
-        "${identity:10,str,3.14,true,false,inf,[1,2,3], 'quoted', \"quoted\", 'a\\,b\\,c'}",
+        "${identity:10,str,3.14,true,false,inf,[1,2,3], 'quoted', \"quoted\", 'a,b,c'}",
         [
             10,
             "str",

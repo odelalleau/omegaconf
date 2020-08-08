@@ -353,9 +353,7 @@ def get_value_kind(
     if value == "???":
         return ret(ValueKind.MANDATORY_MISSING)
 
-    # Note: a string like `$\{abc\}` does not contain any interpolation, but is still
-    # parsed as an interpolation so that the escape characters can be removed.
-    if not isinstance(value, str) or ("${" not in value and r"$\{" not in value):
+    if not isinstance(value, str) or "${" not in value:
         return ret(ValueKind.VALUE)
 
     if return_parse_tree:
