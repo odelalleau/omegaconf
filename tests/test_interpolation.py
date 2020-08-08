@@ -647,8 +647,8 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     # Legal vs illegal characters in non-quoted strings within interpolations.
     (
         "str_legal_noquote",
-        r"${identity:a/-%#?&@,\ \.\,\:b\{\}\[\]  \ }",
-        ["a/-%#?&@", " .,:b{}[]   "],
+        r"${identity:a./-%#?&@,\ \,\:b\{\}\[\]  \ }",
+        ["a./-%#?&@", " ,:b{}[]   "],
     ),
     ("str_equal_noquote", "${identity:a,=b}", ["a", "=b"],),
     ("str_equal_quoted", "${identity:a,'=b'}", ["a", "=b"]),
@@ -677,15 +677,19 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     (
         "str_top_quoted_inter",
         r"Not an interpolation: $\{prim_str\}",
-        r"Not an interpolation: ${prim_str}",
+        r"Not an interpolation: $\{prim_str\}",
     ),
     (
         "str_top_quoted_inter_error",
         r"Missing escape: \${prim_str}",
-        r"Missing escape: \hi",
+        "Missing escape: ${prim_str}",
     ),
-    ("str_top_quoted_braces", r"Braced: \{${prim_str}\}", "Braced: {hi}",),
-    ("str_concat_interpolations", "${true}${float}", "True1.1"),
+    ("str_top_quoted_braces", r"Braced: \{${prim_str}\}", r"Braced: \{hi\}",),
+    ("str_top_leading_dollars", r"$$${prim_str}", "$$hi"),
+    ("str_top_trailing_dollars", r"${prim_str}$$$$", "hi$$$$"),
+    ("str_top_leading_escapes", r"\\\\${prim_str}", r"\\\${prim_str}"),
+    ("str_top_trailing_escapes", r"${prim_str}\\\\", r"hi\\\\"),
+    ("str_top_concat_interpolations", "${true}${float}", "True1.1"),
     # String interpolations (within interpolations).
     (
         "str_no_other",
@@ -710,6 +714,8 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_quoted_int", "${identity:'123'}", "123"),
     ("str_quoted_null", "${identity:'null'}", "null"),
     ("str_quoted_bool", "${identity:'truE', \"FalSe\"}", ["truE", "FalSe"]),
+    ("str_esc_inter", r"${identity:\${foo\}}", "${foo}"),
+    ("str_esc_brace", r"${identity:$\{foo\}}", "${foo}"),
     # Structured interpolations.
     ("list", "${identity:[0, 1]}", [0, 1]),
     (

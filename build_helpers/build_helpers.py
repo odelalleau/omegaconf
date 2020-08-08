@@ -25,7 +25,8 @@ class ANTLRCommand(Command):  # type: ignore
         build_dir = Path(__file__).parent.absolute()
         project_root = build_dir.parent
         for grammar in [
-            "Interpolation.g4",
+            "InterpolationLexer.g4",
+            "InterpolationParser.g4",
         ]:
             command = [
                 "java",
