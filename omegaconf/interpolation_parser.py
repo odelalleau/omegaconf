@@ -172,7 +172,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
 
     def visitItem_unquoted(self, ctx: InterpolationParser.Item_unquotedContext) -> Any:
         if ctx.getChildCount() == 1:
-            # NULL | BOOL | INT | FLOAT | ARGS_ESC | ESC_INTER | ARGS_STR
+            # NULL | BOOL | INT | FLOAT | ESC | ESC_INTER | ARGS_STR
             child = ctx.getChild(0)
             assert isinstance(child, TerminalNode)
             # Parse primitive types.
@@ -185,7 +185,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
             elif child.symbol.type == InterpolationLexer.FLOAT:
                 return float(child.symbol.text)
             elif child.symbol.type in (
-                InterpolationLexer.ARGS_ESC,
+                InterpolationLexer.ESC,
                 InterpolationLexer.ESC_INTER,
             ):
                 return self._unescape([child])
@@ -322,7 +322,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
         chrs = []
         for node in seq:
             s = node.symbol
-            if s.type == InterpolationLexer.ARGS_ESC:
+            if s.type == InterpolationLexer.ESC:
                 chrs.append(s.text[1::2])
             elif s.type == InterpolationLexer.ESC_INTER:
                 chrs.append(s.text[1:])
@@ -341,7 +341,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
         Visitor for quoted strings (either with single or double quotes).
         """
         # ARGS_QUOTE_*
-        # (interpolation | Q*_ESC | ESC_INTER | Q*_CHR | Q*_STR)+
+        # (interpolation | ESC | ESC_INTER | Q*_CHR | Q*_STR)+
         # Q*_CLOSE;
         assert ctx.getChildCount() >= 3
         vals = []

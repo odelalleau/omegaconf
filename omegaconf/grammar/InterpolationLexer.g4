@@ -10,6 +10,7 @@ fragment ALPHA_: [a-zA-Z_];
 fragment DIGIT_: [0-9];
 fragment INTERPOLATION_OPEN_: '${';
 fragment ESC_INTER_: '\\${';  // escaped interpolation
+fragment ESC_BACKSLASH_: '\\\\';  // escaped backslash
 
 /////////////////////////
 // DEFAULT (TOP-LEVEL) //
@@ -17,6 +18,7 @@ fragment ESC_INTER_: '\\${';  // escaped interpolation
 
 INTERPOLATION_OPEN: INTERPOLATION_OPEN_ -> pushMode(INTERPOLATION_BEGIN);
 
+ESC: (ESC_BACKSLASH_)+;
 ESC_INTER: ESC_INTER_;
 TOP_CHR: [\\$];
 TOP_STR: ~[\\$]+;  // anything else
@@ -60,7 +62,7 @@ mode QUOTED_SINGLE;
 QSINGLE_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION_BEGIN);
 QSINGLE_CLOSE: '\'' -> popMode;
 
-QSINGLE_ESC: '\\\'';
+QSINGLE_ESC: ('\\\'' | ESC_BACKSLASH_)+ -> type(ESC);
 QSINGLE_ESC_INTER: ESC_INTER_ -> type(ESC_INTER);
 
 QSINGLE_CHR: [\\$];
@@ -75,7 +77,7 @@ mode QUOTED_DOUBLE;
 QDOUBLE_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION_BEGIN);
 QDOUBLE_CLOSE: '"' -> popMode;
 
-QDOUBLE_ESC: '\\"';
+QDOUBLE_ESC: ('\\"' | ESC_BACKSLASH_)+ -> type(ESC);
 QDOUBLE_ESC_INTER: ESC_INTER_ -> type(ESC_INTER);
 
 QDOUBLE_CHR: [\\$];
@@ -93,7 +95,7 @@ ARGS_QUOTE_SINGLE: '\'' -> pushMode(QUOTED_SINGLE);
 ARGS_QUOTE_DOUBLE: '"' -> pushMode(QUOTED_DOUBLE);
 ARGS_BRACE_CLOSE: '}' -> popMode;
 
-ARGS_ESC: ('\\{' | '\\}' | '\\[' | '\\]' | '\\,' | '\\:' | '\\ ' | '\\\t')+;
+ARGS_ESC: ('\\{' | '\\}' | '\\[' | '\\]' | '\\,' | '\\:' | '\\ ' | '\\\t' | ESC_BACKSLASH_)+ -> type(ESC);
 ARGS_ESC_INTER: ESC_INTER_ -> type(ESC_INTER);
 
 ARGS_BRACKET_OPEN: '[';

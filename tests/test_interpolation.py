@@ -666,21 +666,14 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_top_middle_quote_single", "I'd like ${prim_str}", "I'd like hi"),
     ("str_top_middle_quote_double", 'I"d like ${prim_str}', 'I"d like hi'),
     ("str_top_middle_quotes_single", "I like '${prim_str}'", "I like 'hi'"),
-    (
-        "str_top_quoted_inter",
-        r"Not an interpolation: $\{prim_str\}",
-        r"Not an interpolation: $\{prim_str\}",
-    ),
-    (
-        "str_top_quoted_inter_error",
-        r"Missing escape: \${prim_str}",
-        "Missing escape: ${prim_str}",
-    ),
+    ("str_top_esc_inter", r"Esc: \${prim_str}", "Esc: ${prim_str}",),
+    ("str_top_esc_inter_wrong", r"Wrong: $\{prim_str\}", r"Wrong: $\{prim_str\}",),
+    ("str_top_esc_backslash", r"Esc: \\${prim_str}", r"Esc: \hi",),
     ("str_top_quoted_braces", r"Braced: \{${prim_str}\}", r"Braced: \{hi\}",),
     ("str_top_leading_dollars", r"$$${prim_str}", "$$hi"),
     ("str_top_trailing_dollars", r"${prim_str}$$$$", "hi$$$$"),
-    ("str_top_leading_escapes", r"\\\\${prim_str}", r"\\\${prim_str}"),
-    ("str_top_trailing_escapes", r"${prim_str}\\\\", r"hi\\\\"),
+    ("str_top_leading_escapes", r"\\\\\${prim_str}", r"\\${prim_str}"),
+    ("str_top_trailing_escapes", "${prim_str}" + "\\" * 5, "hi" + "\\" * 3),
     ("str_top_concat_interpolations", "${true}${float}", "True1.1"),
     # String interpolations (within interpolations).
     (
@@ -714,6 +707,8 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ),
     ("str_esc_inter", r"${identity:\${foo\}}", "${foo}"),
     ("str_esc_brace", r"${identity:$\{foo\}}", "${foo}"),
+    ("str_esc_backslash", r"${identity:\\}", "\\"),
+    ("str_esc_mixed", r"${identity:\\,\,\{,\null}", ["\\", ",{", r"\null"]),
     # Structured interpolations.
     ("list", "${identity:[0, 1]}", [0, 1]),
     (

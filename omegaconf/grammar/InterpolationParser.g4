@@ -18,7 +18,7 @@ options {tokenVocab = InterpolationLexer;}
 // Top-level: strings (that need not be parsed), potentially mixed with interpolations.
 root: toplevel EOF;
 toplevel: toplevel_str | (toplevel_str? (interpolation toplevel_str?)+);
-toplevel_str: (ESC_INTER | TOP_CHR | TOP_STR)+;
+toplevel_str: (ESC | ESC_INTER | TOP_CHR | TOP_STR)+;
 
 // Interpolations.
 interpolation: interpolation_node | interpolation_resolver;
@@ -38,16 +38,16 @@ key_value: item ARGS_COLON item;
 
 // Quoted strings.
 quoted_single: ARGS_QUOTE_SINGLE
-               (interpolation | QSINGLE_ESC | ESC_INTER | QSINGLE_CHR | QSINGLE_STR)+
+               (interpolation | ESC | ESC_INTER | QSINGLE_CHR | QSINGLE_STR)+
                QSINGLE_CLOSE;
 quoted_double: ARGS_QUOTE_DOUBLE
-               (interpolation | QDOUBLE_ESC | ESC_INTER | QDOUBLE_CHR | QDOUBLE_STR)+
+               (interpolation | ESC | ESC_INTER | QDOUBLE_CHR | QDOUBLE_STR)+
                QDOUBLE_CLOSE;
 
 // Individual items used as resolver arguments or within data structures.
 item: ARGS_WS? item_no_outer_ws ARGS_WS?;
 item_no_outer_ws: interpolation | dictionary | bracketed_list | quoted_single | quoted_double | item_unquoted;
-item_unquoted: NULL | BOOL | INT | FLOAT | ARGS_ESC | ESC_INTER | ARGS_STR        // single primitive,
-    | ((NULL | BOOL | INT | FLOAT | ARGS_ESC | ESC_INTER | ARGS_STR)              // or concatenation of multiple primitives
-       (NULL | BOOL | INT | FLOAT | ARGS_ESC | ESC_INTER | ARGS_STR | ARGS_WS)*   // (possibly with spaces in the middle)
-       (NULL | BOOL | INT | FLOAT | ARGS_ESC | ESC_INTER | ARGS_STR));
+item_unquoted: NULL | BOOL | INT | FLOAT | ESC | ESC_INTER | ARGS_STR        // single primitive,
+    | ((NULL | BOOL | INT | FLOAT | ESC | ESC_INTER | ARGS_STR)              // or concatenation of multiple primitives
+       (NULL | BOOL | INT | FLOAT | ESC | ESC_INTER | ARGS_STR | ARGS_WS)*   // (possibly with spaces in the middle)
+       (NULL | BOOL | INT | FLOAT | ESC | ESC_INTER | ARGS_STR));
