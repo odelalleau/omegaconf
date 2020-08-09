@@ -166,29 +166,11 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
     def visitItem_no_outer_ws(
         self, ctx: InterpolationParser.Item_no_outer_wsContext
     ) -> Any:
-        if ctx.getChildCount() == 1:
-            # interpolation | dictionary | bracketed_list | item_quotable
-            return self.visit(ctx.getChild(0))
-        # Quoted item, among:
-        #   ARGS_QUOTE_SINGLE ARGS_WS? item_quotable ARGS_WS? ARGS_QUOTE_SINGLE |
-        #   ARGS_QUOTE_DOUBLE ARGS_WS? item_quotable ARGS_WS? ARGS_QUOTE_DOUBLE
-        n_children = ctx.getChildCount()
-        assert n_children >= 3
-        res = []
-        for child_idx, child in enumerate(ctx.getChildren()):
-            if child_idx == 0 or child_idx == n_children - 1:
-                assert isinstance(child, TerminalNode)  # start / end quotes
-            elif isinstance(child, TerminalNode):
-                assert (
-                    child.symbol.type == InterpolationLexer.ARGS_WS
-                )  # leading / trailing whitespace
-                res.append(child)
-            else:
-                assert isinstance(child, InterpolationParser.Item_quotableContext)
-                res.extend(child.getChildren())
-        return self._unescape(res)
+        # interpolation | dictionary | bracketed_list | quoted_single | quoted_double | item_unquoted
+        assert ctx.getChildCount() == 1
+        return self.visit(ctx.getChild(0))
 
-    def visitItem_quotable(self, ctx: InterpolationParser.Item_quotableContext) -> Any:
+    def visitItem_unquoted(self, ctx: InterpolationParser.Item_unquotedContext) -> Any:
         if ctx.getChildCount() == 1:
             # NULL | BOOL | INT | FLOAT | ARGS_ESC | ARGS_ESC_INTER | ARGS_STR
             child = ctx.getChild(0)
@@ -283,6 +265,12 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
         value = self.visitItem(ctx.getChild(2))
         return key, value
 
+    def visitQuoted_double(self, ctx: InterpolationParser.Quoted_doubleContext) -> str:
+        return self._visitQuoted(ctx)
+
+    def visitQuoted_single(self, ctx: InterpolationParser.Quoted_singleContext) -> str:
+        return self._visitQuoted(ctx)
+
     def visitRoot(
         self, ctx: InterpolationParser.RootContext
     ) -> Union[str, Optional["Node"]]:
@@ -344,6 +332,28 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
             else:
                 chrs.append(s.text)
         return "".join(chrs)
+
+    def _visitQuoted(
+        self,
+        ctx: Union[
+            InterpolationParser.Quoted_singleContext,
+            InterpolationParser.Quoted_doubleContext,
+        ],
+    ) -> str:
+        """
+        Visitor for quoted strings (either with single or double quotes).
+        """
+        # ARGS_QUOTE_*
+        # (interpolation | Q*_ESC | Q*_ESC_INTER | Q*_CHR | Q*_STR)+
+        # Q*_CLOSE;
+        assert ctx.getChildCount() >= 3
+        vals = []
+        for child in list(ctx.getChildren())[1:-1]:
+            if isinstance(child, InterpolationParser.InterpolationContext):
+                vals.append(str(self.visitInterpolation(child)))
+            else:
+                vals.append(self._unescape([child]))
+        return "".join(vals)
 
 
 def parse(value: str) -> InterpolationParser.RootContext:

@@ -17,8 +17,7 @@ fragment ESC_INTER: '\\${';  // escaped interpolation
 TOP_INTERPOLATION_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
 
 TOP_ESC_INTER: ESC_INTER;
-TOP_BACKSLASH: '\\';
-TOP_DOLLAR: '$';
+TOP_CHR: [\\$];
 TOP_STR: ~[\\$]+;  // anything else
 
 /////////////////////////
@@ -27,7 +26,7 @@ TOP_STR: ~[\\$]+;  // anything else
 
 mode INTERPOLATION_BEGIN;
 
-BEGIN_NESTED_INTERPOLATION_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
+BEGIN_INTER_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
 BEGIN_DOT: '.' -> mode(DOTPATH);
 BEGIN_COLON: ':' -> mode(RESOLVER_ARGS);
 BEGIN_CLOSE: '}' -> popMode;
@@ -45,11 +44,41 @@ BEGIN_OTHER: ~[a-zA-Z_:.${}[\]'" \t\\]+;
 
 mode DOTPATH;
 
-DOTPATH_NESTED_INTERPOLATION_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
+DOTPATH_INTER_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
 DOTPATH_CLOSE: '}' -> popMode;
 
 DOTPATH_DOT: '.';
 DOTPATH_OTHER: ~[:.${}[\]'" \t\\]+;
+
+///////////////////
+// QUOTED_SINGLE //
+///////////////////
+
+mode QUOTED_SINGLE;
+
+QSINGLE_INTER_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
+QSINGLE_CLOSE: '\'' -> popMode;
+
+QSINGLE_ESC: '\\\'';
+QSINGLE_ESC_INTER: ESC_INTER;
+
+QSINGLE_CHR: [\\$];
+QSINGLE_STR: (~['\\$])+;
+
+///////////////////
+// QUOTED_DOUBLE //
+///////////////////
+
+mode QUOTED_DOUBLE;
+
+QDOUBLE_INTER_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
+QDOUBLE_CLOSE: '"' -> popMode;
+
+QDOUBLE_ESC: '\\"';
+QDOUBLE_ESC_INTER: ESC_INTER;
+
+QDOUBLE_CHR: [\\$];
+QDOUBLE_STR: (~["\\$])+;
 
 ///////////////////
 // RESOLVER_ARGS //
@@ -57,8 +86,10 @@ DOTPATH_OTHER: ~[:.${}[\]'" \t\\]+;
 
 mode RESOLVER_ARGS;
 
-ARGS_NESTED_INTERPOLATION_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
+ARGS_INTER_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
 ARGS_BRACE_OPEN: '{' -> pushMode(RESOLVER_ARGS);
+ARGS_QUOTE_SINGLE: '\'' -> pushMode(QUOTED_SINGLE);
+ARGS_QUOTE_DOUBLE: '"' -> pushMode(QUOTED_DOUBLE);
 ARGS_BRACE_CLOSE: '}' -> popMode;
 
 ARGS_ESC: ('\\{' | '\\}' | '\\[' | '\\]' | '\\,' | '\\:' | '\\ ' | '\\\t')+;
@@ -66,9 +97,6 @@ ARGS_ESC_INTER: ESC_INTER;
 
 ARGS_BRACKET_OPEN: '[';
 ARGS_BRACKET_CLOSE: ']';
-
-ARGS_QUOTE_SINGLE: '\'';
-ARGS_QUOTE_DOUBLE: '"';
 
 ARGS_COMMA: ',';
 ARGS_COLON: ':';

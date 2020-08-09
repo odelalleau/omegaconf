@@ -18,7 +18,7 @@ options {tokenVocab = InterpolationLexer;}
 // Top-level: strings (that need not be parsed), potentially mixed with interpolations.
 root: toplevel EOF;
 toplevel: toplevel_str | (toplevel_str? (interpolation toplevel_str?)+);
-toplevel_str: (TOP_ESC_INTER | TOP_BACKSLASH | TOP_DOLLAR | TOP_STR)+;
+toplevel_str: (TOP_ESC_INTER | TOP_CHR | TOP_STR)+;
 
 // Interpolations.
 interpolation: interpolation_node | interpolation_resolver;
@@ -28,7 +28,12 @@ interpolation_node: interpolation_open BEGIN_WS?
 interpolation_resolver: interpolation_open BEGIN_WS?
                         (interpolation | BEGIN_ID) BEGIN_WS? BEGIN_COLON sequence?
                         ARGS_BRACE_CLOSE;
-interpolation_open: TOP_INTERPOLATION_OPEN | BEGIN_NESTED_INTERPOLATION_OPEN | DOTPATH_NESTED_INTERPOLATION_OPEN | ARGS_NESTED_INTERPOLATION_OPEN;
+interpolation_open: TOP_INTERPOLATION_OPEN
+                  | BEGIN_INTER_OPEN
+                  | DOTPATH_INTER_OPEN
+                  | ARGS_INTER_OPEN
+                  | QSINGLE_INTER_OPEN
+                  | QDOUBLE_INTER_OPEN;
 interpolation_node_close: BEGIN_CLOSE | DOTPATH_CLOSE;
 config_key: interpolation | (BEGIN_ID | BEGIN_OTHER)+ | DOTPATH_OTHER+;
 
@@ -38,13 +43,18 @@ bracketed_list: ARGS_BRACKET_OPEN sequence? ARGS_BRACKET_CLOSE;
 dictionary: ARGS_BRACE_OPEN (key_value (ARGS_COMMA key_value)*)? ARGS_BRACE_CLOSE;
 key_value: item ARGS_COLON item;
 
+// Quoted strings.
+quoted_single: ARGS_QUOTE_SINGLE
+               (interpolation | QSINGLE_ESC | QSINGLE_ESC_INTER | QSINGLE_CHR | QSINGLE_STR)+
+               QSINGLE_CLOSE;
+quoted_double: ARGS_QUOTE_DOUBLE
+               (interpolation | QDOUBLE_ESC | QDOUBLE_ESC_INTER | QDOUBLE_CHR | QDOUBLE_STR)+
+               QDOUBLE_CLOSE;
+
 // Individual items used as resolver arguments or within data structures.
 item: ARGS_WS? item_no_outer_ws ARGS_WS?;
-item_no_outer_ws: interpolation | dictionary | bracketed_list | item_quotable
-                // Allow adding whitespaces within quotes for quotable items.
-                | ARGS_QUOTE_SINGLE ARGS_WS? item_quotable ARGS_WS? ARGS_QUOTE_SINGLE
-                | ARGS_QUOTE_DOUBLE ARGS_WS? item_quotable ARGS_WS? ARGS_QUOTE_DOUBLE;
-item_quotable: NULL | BOOL | INT | FLOAT | ARGS_ESC | ARGS_ESC_INTER | ARGS_STR        // single primitive,
+item_no_outer_ws: interpolation | dictionary | bracketed_list | quoted_single | quoted_double | item_unquoted;
+item_unquoted: NULL | BOOL | INT | FLOAT | ARGS_ESC | ARGS_ESC_INTER | ARGS_STR        // single primitive,
     | ((NULL | BOOL | INT | FLOAT | ARGS_ESC | ARGS_ESC_INTER | ARGS_STR)              // or concatenation of multiple primitives
        (NULL | BOOL | INT | FLOAT | ARGS_ESC | ARGS_ESC_INTER | ARGS_STR | ARGS_WS)*   // (possibly with spaces in the middle)
        (NULL | BOOL | INT | FLOAT | ARGS_ESC | ARGS_ESC_INTER | ARGS_STR));

@@ -594,16 +594,8 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("unquoted_other_char", f"${{identity:{chr(200)}}}", chr(200)),
     ("unquoted_dot", "${identity:.}", "."),
     ("unquoted_esc", r"${identity:\{}", "{"),
-    (
-        "quoted_str_single",
-        "${identity:'!@#$%^&*()[]:.,'}",
-        (True, InterpolationSyntaxError),
-    ),
-    (
-        "quoted_str_double",
-        '${identity:"!@#$%^&*()[]:.,"}',
-        (True, InterpolationSyntaxError),
-    ),
+    ("quoted_str_single", "${identity:'!@#$%^&*()[]:.,\"'}", '!@#$%^&*()[]:.,"',),
+    ("quoted_str_double", '${identity:"!@#$%^&*()[]:.,\'"}', "!@#$%^&*()[]:.,'",),
     ("quote_outer_ws_single", "${identity: '  a \t'}", "  a \t"),
     ("int", "${identity:123}", 123),
     ("int_pos", "${identity:+123}", 123),
@@ -714,6 +706,12 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_quoted_int", "${identity:'123'}", "123"),
     ("str_quoted_null", "${identity:'null'}", "null"),
     ("str_quoted_bool", "${identity:'truE', \"FalSe\"}", ["truE", "FalSe"]),
+    ("str_quoted_inter", "${identity:'${null}'}", "None"),
+    (
+        "str_quoted_inter_nested",
+        "${identity:'${identity:\"L=${prim_list}\"}'}",
+        "L=[-1, 'a', 1.1]",
+    ),
     ("str_esc_inter", r"${identity:\${foo\}}", "${foo}"),
     ("str_esc_brace", r"${identity:$\{foo\}}", "${foo}"),
     # Structured interpolations.
@@ -726,7 +724,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("empties", "${identity:[],{}}", [[], {}]),
     (
         "structured_mixed",
-        "${identity:10,str,3.14,true,false,inf,[1,2,3], 'quoted', \"quoted\", 'a\\,b\\,c'}",
+        "${identity:10,str,3.14,true,false,inf,[1,2,3], 'quoted', \"quoted\", 'a,b,c'}",
         [
             10,
             "str",
