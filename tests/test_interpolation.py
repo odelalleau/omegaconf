@@ -708,7 +708,12 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_esc_inter", r"${identity:\${foo\}}", "${foo}"),
     ("str_esc_brace", r"${identity:$\{foo\}}", "${foo}"),
     ("str_esc_backslash", r"${identity:\\}", "\\"),
-    ("str_esc_mixed", r"${identity:\\,\,\{,\null}", ["\\", ",{", r"\null"]),
+    ("str_esc_many", r"${identity:\\,\,\{,\null}", ["\\", ",{", r"\null"]),
+    ("str_esc_mixed", r"${identity:\,\:\\\{foo\}\[\]}", r",:\{foo}[]"),
+    ("str_esc_quoted_single_1", r"${identity:'ab\'cd\'\'${prim_str}'}", "ab'cd''hi"),
+    ("str_esc_quoted_single_2", "${identity:'\"\\\\\\${foo}\\ '}", r'"\${foo}\ '),
+    ("str_esc_quoted_double", r'${identity:"ab\"cd\"\"${prim_str}"}', 'ab"cd""hi'),
+    ("str_esc_quoted_double_2", '${identity:"\'\\\\\\${foo}\\ "}', r"'\${foo}\ "),
     # Structured interpolations.
     ("list", "${identity:[0, 1]}", [0, 1]),
     (
