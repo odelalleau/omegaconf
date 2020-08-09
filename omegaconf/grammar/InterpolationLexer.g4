@@ -8,15 +8,16 @@ lexer grammar InterpolationLexer;
 // Re-usable Fragments.
 fragment ALPHA_: [a-zA-Z_];
 fragment DIGIT_: [0-9];
+fragment INTERPOLATION_OPEN_: '${';
 fragment ESC_INTER_: '\\${';  // escaped interpolation
 
 /////////////////////////
 // DEFAULT (TOP-LEVEL) //
 /////////////////////////
 
-TOP_INTERPOLATION_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
+INTERPOLATION_OPEN: INTERPOLATION_OPEN_ -> pushMode(INTERPOLATION_BEGIN);
 
-TOP_ESC_INTER: ESC_INTER_;
+ESC_INTER: ESC_INTER_;
 TOP_CHR: [\\$];
 TOP_STR: ~[\\$]+;  // anything else
 
@@ -26,17 +27,17 @@ TOP_STR: ~[\\$]+;  // anything else
 
 mode INTERPOLATION_BEGIN;
 
-BEGIN_INTER_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
+BEGIN_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION_BEGIN);
 BEGIN_DOT: '.' -> mode(DOTPATH);
 BEGIN_COLON: ':' -> mode(RESOLVER_ARGS);
-BEGIN_CLOSE: '}' -> popMode;
+INTERPOLATION_CLOSE: '}' -> popMode;
 
 // Resolver names must match `ID` (or be an interpolation).
 BEGIN_ID : ALPHA_ (ALPHA_ | DIGIT_)*;  // foo, bar_123
 BEGIN_WS: [ \t]+;
 // Forbidden characters in config key names: `:.${}[]'" \t\`.
 // We do not allow escaping of these characters.
-BEGIN_OTHER: ~[a-zA-Z_:.${}[\]'" \t\\]+;
+BEGIN_STR: ~[a-zA-Z_:.${}[\]'" \t\\]+;
 
 /////////////
 // DOTPATH //
@@ -44,8 +45,8 @@ BEGIN_OTHER: ~[a-zA-Z_:.${}[\]'" \t\\]+;
 
 mode DOTPATH;
 
-DOTPATH_INTER_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
-DOTPATH_CLOSE: '}' -> popMode;
+DOTPATH_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION_BEGIN);
+DOTPATH_INTER_CLOSE: '}' -> type(INTERPOLATION_CLOSE), popMode;
 
 DOTPATH_DOT: '.';
 DOTPATH_OTHER: ~[:.${}[\]'" \t\\]+;
@@ -56,11 +57,11 @@ DOTPATH_OTHER: ~[:.${}[\]'" \t\\]+;
 
 mode QUOTED_SINGLE;
 
-QSINGLE_INTER_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
+QSINGLE_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION_BEGIN);
 QSINGLE_CLOSE: '\'' -> popMode;
 
 QSINGLE_ESC: '\\\'';
-QSINGLE_ESC_INTER: ESC_INTER_;
+QSINGLE_ESC_INTER: ESC_INTER_ -> type(ESC_INTER);
 
 QSINGLE_CHR: [\\$];
 QSINGLE_STR: (~['\\$])+;
@@ -71,11 +72,11 @@ QSINGLE_STR: (~['\\$])+;
 
 mode QUOTED_DOUBLE;
 
-QDOUBLE_INTER_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
+QDOUBLE_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION_BEGIN);
 QDOUBLE_CLOSE: '"' -> popMode;
 
 QDOUBLE_ESC: '\\"';
-QDOUBLE_ESC_INTER: ESC_INTER_;
+QDOUBLE_ESC_INTER: ESC_INTER_ -> type(ESC_INTER);
 
 QDOUBLE_CHR: [\\$];
 QDOUBLE_STR: (~["\\$])+;
@@ -86,14 +87,14 @@ QDOUBLE_STR: (~["\\$])+;
 
 mode RESOLVER_ARGS;
 
-ARGS_INTER_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
+ARGS_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION_BEGIN);
 ARGS_BRACE_OPEN: '{' -> pushMode(RESOLVER_ARGS);
 ARGS_QUOTE_SINGLE: '\'' -> pushMode(QUOTED_SINGLE);
 ARGS_QUOTE_DOUBLE: '"' -> pushMode(QUOTED_DOUBLE);
 ARGS_BRACE_CLOSE: '}' -> popMode;
 
 ARGS_ESC: ('\\{' | '\\}' | '\\[' | '\\]' | '\\,' | '\\:' | '\\ ' | '\\\t')+;
-ARGS_ESC_INTER: ESC_INTER_;
+ARGS_ESC_INTER: ESC_INTER_ -> type(ESC_INTER);
 
 ARGS_BRACKET_OPEN: '[';
 ARGS_BRACKET_CLOSE: ']';

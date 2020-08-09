@@ -18,24 +18,17 @@ options {tokenVocab = InterpolationLexer;}
 // Top-level: strings (that need not be parsed), potentially mixed with interpolations.
 root: toplevel EOF;
 toplevel: toplevel_str | (toplevel_str? (interpolation toplevel_str?)+);
-toplevel_str: (TOP_ESC_INTER | TOP_CHR | TOP_STR)+;
+toplevel_str: (ESC_INTER | TOP_CHR | TOP_STR)+;
 
 // Interpolations.
 interpolation: interpolation_node | interpolation_resolver;
-interpolation_node: interpolation_open BEGIN_WS?
+interpolation_node: INTERPOLATION_OPEN BEGIN_WS?
                     config_key ((BEGIN_DOT | DOTPATH_DOT) config_key)*
-                    BEGIN_WS? interpolation_node_close;
-interpolation_resolver: interpolation_open BEGIN_WS?
+                    BEGIN_WS? INTERPOLATION_CLOSE;
+interpolation_resolver: INTERPOLATION_OPEN BEGIN_WS?
                         (interpolation | BEGIN_ID) BEGIN_WS? BEGIN_COLON sequence?
                         ARGS_BRACE_CLOSE;
-interpolation_open: TOP_INTERPOLATION_OPEN
-                  | BEGIN_INTER_OPEN
-                  | DOTPATH_INTER_OPEN
-                  | ARGS_INTER_OPEN
-                  | QSINGLE_INTER_OPEN
-                  | QDOUBLE_INTER_OPEN;
-interpolation_node_close: BEGIN_CLOSE | DOTPATH_CLOSE;
-config_key: interpolation | (BEGIN_ID | BEGIN_OTHER)+ | DOTPATH_OTHER+;
+config_key: interpolation | (BEGIN_ID | BEGIN_STR)+ | DOTPATH_OTHER+;
 
 // Data structures.
 sequence: item (ARGS_COMMA item)*;
@@ -45,16 +38,16 @@ key_value: item ARGS_COLON item;
 
 // Quoted strings.
 quoted_single: ARGS_QUOTE_SINGLE
-               (interpolation | QSINGLE_ESC | QSINGLE_ESC_INTER | QSINGLE_CHR | QSINGLE_STR)+
+               (interpolation | QSINGLE_ESC | ESC_INTER | QSINGLE_CHR | QSINGLE_STR)+
                QSINGLE_CLOSE;
 quoted_double: ARGS_QUOTE_DOUBLE
-               (interpolation | QDOUBLE_ESC | QDOUBLE_ESC_INTER | QDOUBLE_CHR | QDOUBLE_STR)+
+               (interpolation | QDOUBLE_ESC | ESC_INTER | QDOUBLE_CHR | QDOUBLE_STR)+
                QDOUBLE_CLOSE;
 
 // Individual items used as resolver arguments or within data structures.
 item: ARGS_WS? item_no_outer_ws ARGS_WS?;
 item_no_outer_ws: interpolation | dictionary | bracketed_list | quoted_single | quoted_double | item_unquoted;
-item_unquoted: NULL | BOOL | INT | FLOAT | ARGS_ESC | ARGS_ESC_INTER | ARGS_STR        // single primitive,
-    | ((NULL | BOOL | INT | FLOAT | ARGS_ESC | ARGS_ESC_INTER | ARGS_STR)              // or concatenation of multiple primitives
-       (NULL | BOOL | INT | FLOAT | ARGS_ESC | ARGS_ESC_INTER | ARGS_STR | ARGS_WS)*   // (possibly with spaces in the middle)
-       (NULL | BOOL | INT | FLOAT | ARGS_ESC | ARGS_ESC_INTER | ARGS_STR));
+item_unquoted: NULL | BOOL | INT | FLOAT | ARGS_ESC | ESC_INTER | ARGS_STR        // single primitive,
+    | ((NULL | BOOL | INT | FLOAT | ARGS_ESC | ESC_INTER | ARGS_STR)              // or concatenation of multiple primitives
+       (NULL | BOOL | INT | FLOAT | ARGS_ESC | ESC_INTER | ARGS_STR | ARGS_WS)*   // (possibly with spaces in the middle)
+       (NULL | BOOL | INT | FLOAT | ARGS_ESC | ESC_INTER | ARGS_STR));

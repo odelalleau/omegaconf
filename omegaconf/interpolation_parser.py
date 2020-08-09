@@ -172,7 +172,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
 
     def visitItem_unquoted(self, ctx: InterpolationParser.Item_unquotedContext) -> Any:
         if ctx.getChildCount() == 1:
-            # NULL | BOOL | INT | FLOAT | ARGS_ESC | ARGS_ESC_INTER | ARGS_STR
+            # NULL | BOOL | INT | FLOAT | ARGS_ESC | ESC_INTER | ARGS_STR
             child = ctx.getChild(0)
             assert isinstance(child, TerminalNode)
             # Parse primitive types.
@@ -186,7 +186,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
                 return float(child.symbol.text)
             elif child.symbol.type in (
                 InterpolationLexer.ARGS_ESC,
-                InterpolationLexer.ARGS_ESC_INTER,
+                InterpolationLexer.ESC_INTER,
             ):
                 return self._unescape([child])
             elif child.symbol.type == InterpolationLexer.ARGS_STR:
@@ -312,7 +312,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
         return "".join(map(str, vals))
 
     def visitToplevel_str(self, ctx: InterpolationParser.Toplevel_strContext) -> str:
-        # TOP_ESC_INTER | TOP_BACKSLASH | TOP_DOLLAR | TOP_STR
+        # ESC_INTER | TOP_BACKSLASH | TOP_DOLLAR | TOP_STR
         return self._unescape(ctx.getChildren())
 
     def _unescape(self, seq: Iterable[TerminalNode]) -> str:
@@ -324,10 +324,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
             s = node.symbol
             if s.type == InterpolationLexer.ARGS_ESC:
                 chrs.append(s.text[1::2])
-            elif s.type in (
-                InterpolationLexer.TOP_ESC_INTER,
-                InterpolationLexer.ARGS_ESC_INTER,
-            ):
+            elif s.type == InterpolationLexer.ESC_INTER:
                 chrs.append(s.text[1:])
             else:
                 chrs.append(s.text)
@@ -344,7 +341,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
         Visitor for quoted strings (either with single or double quotes).
         """
         # ARGS_QUOTE_*
-        # (interpolation | Q*_ESC | Q*_ESC_INTER | Q*_CHR | Q*_STR)+
+        # (interpolation | Q*_ESC | ESC_INTER | Q*_CHR | Q*_STR)+
         # Q*_CLOSE;
         assert ctx.getChildCount() >= 3
         vals = []
