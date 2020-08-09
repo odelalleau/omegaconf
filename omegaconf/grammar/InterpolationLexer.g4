@@ -5,10 +5,10 @@
 
 lexer grammar InterpolationLexer;
 
-// Fragments.
-fragment ALPHA: [a-zA-Z_];
-fragment DIGIT: [0-9];
-fragment ESC_INTER: '\\${';  // escaped interpolation
+// Re-usable Fragments.
+fragment ALPHA_: [a-zA-Z_];
+fragment DIGIT_: [0-9];
+fragment ESC_INTER_: '\\${';  // escaped interpolation
 
 /////////////////////////
 // DEFAULT (TOP-LEVEL) //
@@ -16,7 +16,7 @@ fragment ESC_INTER: '\\${';  // escaped interpolation
 
 TOP_INTERPOLATION_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
 
-TOP_ESC_INTER: ESC_INTER;
+TOP_ESC_INTER: ESC_INTER_;
 TOP_CHR: [\\$];
 TOP_STR: ~[\\$]+;  // anything else
 
@@ -32,7 +32,7 @@ BEGIN_COLON: ':' -> mode(RESOLVER_ARGS);
 BEGIN_CLOSE: '}' -> popMode;
 
 // Resolver names must match `ID` (or be an interpolation).
-BEGIN_ID : ALPHA (ALPHA | DIGIT)*;  // foo, bar_123
+BEGIN_ID : ALPHA_ (ALPHA_ | DIGIT_)*;  // foo, bar_123
 BEGIN_WS: [ \t]+;
 // Forbidden characters in config key names: `:.${}[]'" \t\`.
 // We do not allow escaping of these characters.
@@ -60,7 +60,7 @@ QSINGLE_INTER_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
 QSINGLE_CLOSE: '\'' -> popMode;
 
 QSINGLE_ESC: '\\\'';
-QSINGLE_ESC_INTER: ESC_INTER;
+QSINGLE_ESC_INTER: ESC_INTER_;
 
 QSINGLE_CHR: [\\$];
 QSINGLE_STR: (~['\\$])+;
@@ -75,7 +75,7 @@ QDOUBLE_INTER_OPEN: '${' -> pushMode(INTERPOLATION_BEGIN);
 QDOUBLE_CLOSE: '"' -> popMode;
 
 QDOUBLE_ESC: '\\"';
-QDOUBLE_ESC_INTER: ESC_INTER;
+QDOUBLE_ESC_INTER: ESC_INTER_;
 
 QDOUBLE_CHR: [\\$];
 QDOUBLE_STR: (~["\\$])+;
@@ -93,7 +93,7 @@ ARGS_QUOTE_DOUBLE: '"' -> pushMode(QUOTED_DOUBLE);
 ARGS_BRACE_CLOSE: '}' -> popMode;
 
 ARGS_ESC: ('\\{' | '\\}' | '\\[' | '\\]' | '\\,' | '\\:' | '\\ ' | '\\\t')+;
-ARGS_ESC_INTER: ESC_INTER;
+ARGS_ESC_INTER: ESC_INTER_;
 
 ARGS_BRACKET_OPEN: '[';
 ARGS_BRACKET_CLOSE: ']';
@@ -111,7 +111,7 @@ BOOL:
 // Integers.
 // Note: we allow integers starting with zero(s), as calling `int()` on such a
 // representation works, and it allows sharing more primitives between INT and FLOAT.
-fragment INT_UNSIGNED: DIGIT (('_')? DIGIT)*;  // 0, 7, 1_000
+fragment INT_UNSIGNED: DIGIT_ (('_')? DIGIT_)*;  // 0, 7, 1_000
 INT: [+-]? INT_UNSIGNED;  // 3, -3, +3
 
 // Floats.
