@@ -357,7 +357,7 @@ def test_clear_cache(restore_resolvers: Any) -> None:
 
 
 def test_supported_chars() -> None:
-    supported_chars = "%_-abc123."
+    supported_chars = "abc123`~!@#$%^&*()-_=+\\|;.<>/?"
     c = OmegaConf.create(dict(dir1="${copy:" + supported_chars + "}"))
 
     OmegaConf.register_resolver("copy", lambda x: x)
@@ -583,6 +583,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("id_partial", "entity", ...),
     ("prim_list", [-1, "a", 1.1], ...),
     ("prim_dict", {"a": 0, "b": 1}, ...),
+    ("FalsE", {"TruE": True}, ...),  # used to test keys with bool names
     # Primitive types.
     ("null", "${identity:null}", None),
     ("true", "${identity:TrUe}", True),
@@ -592,6 +593,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("unquoted_str_esc_space", r"${identity:\ hello\ world\ }", " hello world "),
     ("unquoted_str_esc_comma", r"${identity:hello\, world}", "hello, world"),
     ("unquoted_other_char", f"${{identity:{chr(200)}}}", chr(200)),
+    ("unquoted_emoji", f"${{identity:{chr(129299)}}}", chr(129299)),
     ("unquoted_dot", "${identity:.}", "."),
     ("unquoted_esc", r"${identity:\{}", "{"),
     ("quoted_str_single", "${identity:'!@#$%^&*()[]:.,\"'}", '!@#$%^&*()[]:.,"',),
@@ -608,6 +610,10 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("float", "${identity:1.1}", 1.1),
     ("float_no_int", "${identity:.1}", 0.1),
     ("float_no_decimal", "${identity:1.}", 1.0),
+    ("float_plus", "${identity:+1.01}", 1.01),
+    ("float_minus", "${identity:-.2}", -0.2),
+    ("float_bad_1", "${identity:1.+2}", "1.+2"),
+    ("float_bad_2", r"${identity:1\.2}", r"1\.2"),
     ("float_exp_1", "${identity:-1e2}", -100.0),
     ("float_exp_2", "${identity:+1E-2}", 0.01),
     ("float_exp_3", "${identity:1_0e1_0}", 10e10),
@@ -625,6 +631,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("list_access_1", "${prim_list.0}", -1),
     ("list_access_2", "${identity:${prim_list.1},${prim_list.2}}", ["a", 1.1]),
     ("dict_access", "${prim_dict.a}", 0),
+    ("bool_like_keys", "${FalsE.TruE}", True),
     ("invalid_type", "${prim_dict.${float}}", (True, InterpolationTypeError)),
     # Resolver interpolations.
     ("env_int", "${env:OMEGACONF_TEST_ENV_INT}", 123),
@@ -635,16 +642,18 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("space_in_args", "${identity:a, b c}", ["a", "b c"]),
     ("list_as_input", "${identity:[a, b], 0, [1.1]}", [["a", "b"], 0, [1.1]]),
     ("dict_as_input", "${identity:{'a': 1.1, b: b}}", {"a": 1.1, "b": "b"}),
+    (
+        "dict_typo_colons",
+        "${identity:{'a': 1.1, b:: b}}",
+        (True, InterpolationSyntaxError),
+    ),
+    ("dict_unhashable", "${identity:{[0]: 1}}", (True, TypeError)),
     ("missing_resolver", "${MiSsInG_ReSoLvEr:0}", (True, UnsupportedInterpolationType)),
     ("non_str_resolver", "${${bool}:}", (True, InterpolationTypeError)),
-    # Legal vs illegal characters in non-quoted strings within interpolations.
-    (
-        "str_legal_noquote",
-        r"${identity:a./-%#?&@,\ \,\:b\{\}\[\]  \ }",
-        ["a./-%#?&@", " ,:b{}[]   "],
-    ),
-    ("str_equal_noquote", "${identity:a,=b}", ["a", "=b"],),
-    ("str_equal_quoted", "${identity:a,'=b'}", ["a", "=b"]),
+    ("resolver_special", "${infnannulltruefalse:}", "ok"),
+    # Unmatched braces.
+    ("missing_brace", "${identity:${prim_str}", (True, InterpolationSyntaxError)),
+    ("extra_brace", "${identity:${prim_str}}}", "hi}"),
     # String interpolations (top-level).
     ("str_top_basic", "bonjour ${prim_str}", "bonjour hi"),
     ("str_top_quoted_single", "'bonjour ${prim_str}'", "'bonjour hi'",),
@@ -668,7 +677,8 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_top_middle_quote_double", 'I"d like ${prim_str}', 'I"d like hi'),
     ("str_top_middle_quotes_single", "I like '${prim_str}'", "I like 'hi'"),
     ("str_top_esc_inter", r"Esc: \${prim_str}", "Esc: ${prim_str}",),
-    ("str_top_esc_inter_wrong", r"Wrong: $\{prim_str\}", r"Wrong: $\{prim_str\}",),
+    ("str_top_esc_inter_wrong_1", r"Wrong: $\{prim_str\}", r"Wrong: $\{prim_str\}",),
+    ("str_top_esc_inter_wrong_2", r"Wrong: \${prim_str\}", r"Wrong: ${prim_str\}",),
     ("str_top_esc_backslash", r"Esc: \\${prim_str}", r"Esc: \hi",),
     ("str_top_quoted_braces", r"Braced: \{${prim_str}\}", r"Braced: \{hi\}",),
     ("str_top_leading_dollars", r"$$${prim_str}", "$$hi"),
@@ -676,7 +686,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_top_leading_escapes", r"\\\\\${prim_str}", r"\\${prim_str}"),
     ("str_top_trailing_escapes", "${prim_str}" + "\\" * 5, "hi" + "\\" * 3),
     ("str_top_concat_interpolations", "${true}${float}", "True1.1"),
-    # String interpolations (within interpolations).
+    # Quoted strings (within interpolations).
     (
         "str_no_other",
         "${identity:hi_${prim_str_space}}",
@@ -700,21 +710,41 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_quoted_int", "${identity:'123'}", "123"),
     ("str_quoted_null", "${identity:'null'}", "null"),
     ("str_quoted_bool", "${identity:'truE', \"FalSe\"}", ["truE", "FalSe"]),
+    ("str_quoted_list", "${identity:'[a,b, c]'}", "[a,b, c]"),
+    ("str_quoted_dict", '${identity:"{a:b, c: d}"}', "{a:b, c: d}"),
     ("str_quoted_inter", "${identity:'${null}'}", "None"),
     (
         "str_quoted_inter_nested",
         "${identity:'${identity:\"L=${prim_list}\"}'}",
         "L=[-1, 'a', 1.1]",
     ),
-    ("str_esc_inter", r"${identity:\${foo\}}", "${foo}"),
+    ("str_quoted_esc_single_1", r"${identity:'ab\'cd\'\'${prim_str}'}", "ab'cd''hi"),
+    ("str_quoted_esc_single_2", "${identity:'\"\\\\\\${foo}\\ '}", r'"\${foo}\ '),
+    ("str_quoted_esc_double", r'${identity:"ab\"cd\"\"${prim_str}"}', 'ab"cd""hi'),
+    ("str_quoted_esc_double_2", '${identity:"\'\\\\\\${foo}\\ "}', r"'\${foo}\ "),
+    ("str_quoted_backslash_noesc_single", r"${identity:'a\b'}", r"a\b"),
+    ("str_quoted_backslash_noesc_double", r'${identity:"a\b"}', r"a\b"),
+    (
+        "str_legal_noquote",
+        r"${identity:a./-%#?&@,\ \,\:b\{\}\[\]  \ }",
+        ["a./-%#?&@", " ,:b{}[]   "],
+    ),
+    ("str_equal_noquote", "${identity:a,=b}", ["a", "=b"],),
+    ("str_quoted_equal", "${identity:a,'=b'}", ["a", "=b"]),
+    ("str_quoted_too_many_1", "${identity:''a'}", (True, InterpolationSyntaxError)),
+    ("str_quoted_too_many_2", "${identity:'a''}", (True, InterpolationSyntaxError)),
+    ("str_quoted_too_many_3", "${identity:''a''}", (True, InterpolationSyntaxError)),
+    # Unquoted strings (within interpolations).
+    ("str_dollar", "${identity:$}", "$"),
+    ("str_dollar_inter", "${identity:$$${prim_str}}", (True, InterpolationSyntaxError)),
+    ("str_backslash_noesc", r"${identity:ab\cd}", r"ab\cd"),
+    ("str_esc_inter_1", r"${identity:\${foo\}}", "${foo}"),
+    ("str_esc_inter_2", r"${identity:\${}", "${"),
     ("str_esc_brace", r"${identity:$\{foo\}}", "${foo}"),
     ("str_esc_backslash", r"${identity:\\}", "\\"),
-    ("str_esc_many", r"${identity:\\,\,\{,\null}", ["\\", ",{", r"\null"]),
+    ("str_esc_quotes", "${identity:\\'\\\"}", "'\""),
+    ("str_esc_many", r"${identity:\\,\,\{,\]\null}", ["\\", ",{", r"]\null"]),
     ("str_esc_mixed", r"${identity:\,\:\\\{foo\}\[\]}", r",:\{foo}[]"),
-    ("str_esc_quoted_single_1", r"${identity:'ab\'cd\'\'${prim_str}'}", "ab'cd''hi"),
-    ("str_esc_quoted_single_2", "${identity:'\"\\\\\\${foo}\\ '}", r'"\${foo}\ '),
-    ("str_esc_quoted_double", r'${identity:"ab\"cd\"\"${prim_str}"}', 'ab"cd""hi'),
-    ("str_esc_quoted_double_2", '${identity:"\'\\\\\\${foo}\\ "}', r"'\${foo}\ "),
     # Structured interpolations.
     ("list", "${identity:[0, 1]}", [0, 1]),
     (
@@ -748,6 +778,12 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("null_chain", "${null}", None),
     ("true_chain", "${true}", True),
     ("int_chain", "${int}", 123),
+    ("list_chain_1", "${${prim_list}.0}", (True, InterpolationTypeError)),
+    ("dict_chain_1", "${${prim_dict}.a}", (True, InterpolationTypeError)),
+    ("prim_list_copy", "${prim_list}", [-1, "a", 1.1]),  # for below
+    ("prim_dict_copy", "${prim_dict}", {"a": 0, "b": 1}),  # for below
+    ("list_chain_2", "${prim_list_copy.0}", (True, ConfigKeyError)),
+    ("dict_chain_2", "${prim_dict_copy.a}", (True, ConfigKeyError)),
     # Nested interpolations.
     ("ref_prim_str", "prim_str", "prim_str"),
     ("nested_simple", "${${ref_prim_str}}", "hi"),
@@ -867,6 +903,9 @@ def test_all_interpolations(key: str, expected: Any) -> None:
     )
     OmegaConf.register_resolver(
         "True", lambda *args: ["True"] + list(args), variables_as_strings=False
+    )
+    OmegaConf.register_resolver(
+        "infnannulltruefalse", lambda: "ok", variables_as_strings=False
     )
 
     try:
