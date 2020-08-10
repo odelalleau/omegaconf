@@ -37,16 +37,13 @@ dictionary: ARGS_BRACE_OPEN (key_value (ARGS_COMMA key_value)*)? ARGS_BRACE_CLOS
 key_value: item ARGS_COLON item;
 
 // Quoted strings.
-quoted_single: ARGS_QUOTE_SINGLE
-               (interpolation | ESC | ESC_INTER | QSINGLE_CHR | QSINGLE_STR)+
-               QSINGLE_CLOSE;
-quoted_double: ARGS_QUOTE_DOUBLE
-               (interpolation | ESC | ESC_INTER | QDOUBLE_CHR | QDOUBLE_STR)+
-               QDOUBLE_CLOSE;
+quoted_string: ARGS_QUOTE
+               (interpolation | ESC | ESC_INTER | QUOTED_CHR | QUOTED_STR)+
+               QUOTED_CLOSE;
 
 // Individual items used as resolver arguments or within data structures.
 item: ARGS_WS? item_no_outer_ws ARGS_WS?;
-item_no_outer_ws: interpolation | dictionary | bracketed_list | quoted_single | quoted_double | item_unquoted;
+item_no_outer_ws: interpolation | dictionary | bracketed_list | quoted_string | item_unquoted;
 item_unquoted: NULL | BOOL | INT | FLOAT | ESC | ESC_INTER | ARGS_STR        // single primitive,
     | ((NULL | BOOL | INT | FLOAT | ESC | ESC_INTER | ARGS_STR)              // or concatenation of multiple primitives
        (NULL | BOOL | INT | FLOAT | ESC | ESC_INTER | ARGS_STR | ARGS_WS)*   // (possibly with spaces in the middle)

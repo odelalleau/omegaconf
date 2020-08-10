@@ -60,13 +60,13 @@ DOTPATH_OTHER: ~[:.${}[\]'" \t\\]+;
 mode QUOTED_SINGLE;
 
 QSINGLE_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION_BEGIN);
-QSINGLE_CLOSE: '\'' -> popMode;
+QUOTED_CLOSE: '\'' -> popMode;
 
 QSINGLE_ESC: ('\\\'' | ESC_BACKSLASH_)+ -> type(ESC);
 QSINGLE_ESC_INTER: ESC_INTER_ -> type(ESC_INTER);
 
-QSINGLE_CHR: [\\$];
-QSINGLE_STR: (~['\\$])+;
+QUOTED_CHR: [\\$];
+QUOTED_STR: (~['\\$])+;
 
 ///////////////////
 // QUOTED_DOUBLE //
@@ -75,13 +75,13 @@ QSINGLE_STR: (~['\\$])+;
 mode QUOTED_DOUBLE;
 
 QDOUBLE_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION_BEGIN);
-QDOUBLE_CLOSE: '"' -> popMode;
+QDOUBLE_CLOSE: '"' -> type(QUOTED_CLOSE), popMode;
 
 QDOUBLE_ESC: ('\\"' | ESC_BACKSLASH_)+ -> type(ESC);
 QDOUBLE_ESC_INTER: ESC_INTER_ -> type(ESC_INTER);
 
-QDOUBLE_CHR: [\\$];
-QDOUBLE_STR: (~["\\$])+;
+QDOUBLE_CHR: [\\$] -> type(QUOTED_CHR);
+QDOUBLE_STR: (~["\\$])+ -> type(QUOTED_STR);
 
 ///////////////////
 // RESOLVER_ARGS //
@@ -91,8 +91,8 @@ mode RESOLVER_ARGS;
 
 ARGS_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION_BEGIN);
 ARGS_BRACE_OPEN: '{' -> pushMode(RESOLVER_ARGS);
-ARGS_QUOTE_SINGLE: '\'' -> pushMode(QUOTED_SINGLE);
-ARGS_QUOTE_DOUBLE: '"' -> pushMode(QUOTED_DOUBLE);
+ARGS_QUOTE: '\'' -> pushMode(QUOTED_SINGLE);
+ARGS_QUOTE_DOUBLE: '"' -> type(ARGS_QUOTE), pushMode(QUOTED_DOUBLE);
 ARGS_BRACE_CLOSE: '}' -> popMode;
 
 ARGS_ESC: ('\\{' | '\\}' | '\\[' | '\\]' | '\\,' | '\\:' | '\\\'' | '\\"' | '\\ ' | '\\\t' | ESC_BACKSLASH_)+ -> type(ESC);

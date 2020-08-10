@@ -265,11 +265,18 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
         value = self.visitItem(ctx.getChild(2))
         return key, value
 
-    def visitQuoted_double(self, ctx: InterpolationParser.Quoted_doubleContext) -> str:
-        return self._visitQuoted(ctx)
-
-    def visitQuoted_single(self, ctx: InterpolationParser.Quoted_singleContext) -> str:
-        return self._visitQuoted(ctx)
+    def visitQuoted_string(self, ctx: InterpolationParser.Quoted_stringContext) -> str:
+        # ARGS_QUOTE
+        # (interpolation | ESC | ESC_INTER | QUOTED_CHR | QUOTED_STR)+
+        # QUOTED_CLOSE;
+        assert ctx.getChildCount() >= 3
+        vals = []
+        for child in list(ctx.getChildren())[1:-1]:
+            if isinstance(child, InterpolationParser.InterpolationContext):
+                vals.append(str(self.visitInterpolation(child)))
+            else:
+                vals.append(self._unescape([child]))
+        return "".join(vals)
 
     def visitRoot(
         self, ctx: InterpolationParser.RootContext
@@ -329,28 +336,6 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
             else:
                 chrs.append(s.text)
         return "".join(chrs)
-
-    def _visitQuoted(
-        self,
-        ctx: Union[
-            InterpolationParser.Quoted_singleContext,
-            InterpolationParser.Quoted_doubleContext,
-        ],
-    ) -> str:
-        """
-        Visitor for quoted strings (either with single or double quotes).
-        """
-        # ARGS_QUOTE_*
-        # (interpolation | ESC | ESC_INTER | Q*_CHR | Q*_STR)+
-        # Q*_CLOSE;
-        assert ctx.getChildCount() >= 3
-        vals = []
-        for child in list(ctx.getChildren())[1:-1]:
-            if isinstance(child, InterpolationParser.InterpolationContext):
-                vals.append(str(self.visitInterpolation(child)))
-            else:
-                vals.append(self._unescape([child]))
-        return "".join(vals)
 
 
 def parse(value: str) -> InterpolationParser.RootContext:
