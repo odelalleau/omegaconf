@@ -95,7 +95,7 @@ ARGS_QUOTE_SINGLE: '\'' -> pushMode(QUOTED_SINGLE);
 ARGS_QUOTE_DOUBLE: '"' -> pushMode(QUOTED_DOUBLE);
 ARGS_BRACE_CLOSE: '}' -> popMode;
 
-ARGS_ESC: ('\\{' | '\\}' | '\\[' | '\\]' | '\\,' | '\\:' | '\\ ' | '\\\t' | ESC_BACKSLASH_)+ -> type(ESC);
+ARGS_ESC: ('\\{' | '\\}' | '\\[' | '\\]' | '\\,' | '\\:' | '\\\'' | '\\"' | '\\ ' | '\\\t' | ESC_BACKSLASH_)+ -> type(ESC);
 ARGS_ESC_INTER: ESC_INTER_ -> type(ESC_INTER);
 
 ARGS_BRACKET_OPEN: '[';
