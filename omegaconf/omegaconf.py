@@ -339,7 +339,7 @@ class OmegaConf:
         # noinspection PyProtectedMember
         assert (
             name not in BaseContainer._resolvers
-        ), "resolved {} is already registered".format(name)
+        ), "resolver {} is already registered".format(name)
 
         def caching(
             config: BaseContainer, key: Tuple[Any, ...], inputs_str: Tuple[str, ...]

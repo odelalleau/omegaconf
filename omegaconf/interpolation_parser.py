@@ -35,7 +35,7 @@ try:
 
 except ModuleNotFoundError:  # pragma: no cover
     print(
-        "Error importing generated parsers, run `python setup.py antlr` to regenerate.",
+        "Error importing OmegaConf's generated parsers, run `python setup.py antlr` to regenerate.",
         file=sys.stderr,
     )
     sys.exit(1)
