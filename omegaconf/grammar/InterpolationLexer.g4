@@ -5,8 +5,7 @@
 
 lexer grammar InterpolationLexer;
 
-// Re-usable Fragments.
-fragment ALPHA_: [a-zA-Z_];
+// Re-used Fragments.
 fragment DIGIT_: [0-9];
 fragment INTERPOLATION_OPEN_: '${';
 fragment ESC_INTER_: '\\${';  // escaped interpolation
@@ -35,6 +34,7 @@ BEGIN_COLON: ':' -> mode(RESOLVER_ARGS);
 INTERPOLATION_CLOSE: '}' -> popMode;
 
 // Resolver names must match `ID` (or be an interpolation).
+fragment ALPHA_: [a-zA-Z_];
 BEGIN_ID : ALPHA_ (ALPHA_ | DIGIT_)*;  // foo, bar_123
 BEGIN_WS: [ \t]+;
 // Forbidden characters in config key names: `:.${}[]'" \t\`.
@@ -112,15 +112,13 @@ BOOL:
     | [Ff][Aa][Ll][Ss][Ee]; // false
 
 // Integers.
-// Note: we allow integers starting with zero(s), as calling `int()` on such a
-// representation works, and it allows sharing more primitives between INT and FLOAT.
-fragment INT_UNSIGNED: DIGIT_ (('_')? DIGIT_)*;  // 0, 7, 1_000
-INT: [+-]? INT_UNSIGNED;  // 3, -3, +3
+fragment NZ_DIGIT_: [1-9];
+fragment INT_UNSIGNED_: ('0' | NZ_DIGIT_ (('_')? DIGIT_)*);
+INT: [+-]? INT_UNSIGNED_;
 
-// Floats.
-fragment POINT_FLOAT: INT_UNSIGNED? '.' INT_UNSIGNED | INT_UNSIGNED '.';  // .1, 0.1, 0.
-fragment EXPONENT_FLOAT: (INT_UNSIGNED | POINT_FLOAT) [eE] [+-]? INT;
-FLOAT: [+-]? (POINT_FLOAT | EXPONENT_FLOAT | [Ii][Nn][Ff] | [Nn][Aa][Nn]);  // +1., -2.5, -inf, nan
+fragment POINT_FLOAT_: INT_UNSIGNED_? '.' DIGIT_+ | INT_UNSIGNED_ '.';
+fragment EXPONENT_FLOAT_: (INT_UNSIGNED_ | POINT_FLOAT_) [eE] [+-]? INT_UNSIGNED_;
+FLOAT: [+-]? (POINT_FLOAT_ | EXPONENT_FLOAT_ | [Ii][Nn][Ff] | [Nn][Aa][Nn]);
 
 // Other characters. We keep `$` and `\` ungrouped so that e.g. `\{` and '${'
 // can be properly identified.
