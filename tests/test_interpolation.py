@@ -454,15 +454,14 @@ def test_interpolations(cfg: Dict[str, Any], key: str, expected: Any) -> None:
         ),
     ],
 )
-def test_nested_interpolations(cfg: str, expected_dict: Dict[str, Any]) -> None:
+def test_nested_interpolations(
+    restore_resolvers: Any, cfg: str, expected_dict: Dict[str, Any]
+) -> None:
     os.environ["OMEGACONF_NESTED_INTERPOLATIONS_TEST"] = "test123"
     OmegaConf.register_resolver("plus", lambda x, y: x + y, variables_as_strings=False)
-    try:
-        c = OmegaConf.create(cfg)
-        for key, expected in expected_dict.items():
-            assert OmegaConf.select(c, key) == expected
-    finally:
-        OmegaConf.clear_resolvers()
+    c = OmegaConf.create(cfg)
+    for key, expected in expected_dict.items():
+        assert OmegaConf.select(c, key) == expected
 
 
 def test_illegal_character_in_interpolation() -> None:
@@ -877,7 +876,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
         for key, definition, expected in TEST_CONFIG_DATA
     ],
 )
-def test_all_interpolations(key: str, expected: Any) -> None:
+def test_all_interpolations(restore_resolvers: Any, key: str, expected: Any) -> None:
     dbg_test_access_only = False  # debug flag to not test against expected value
     os.environ["OMEGACONF_TEST_ENV_INT"] = "123"
     os.environ.pop("OMEGACONF_TEST_MISSING", None)
@@ -908,36 +907,32 @@ def test_all_interpolations(key: str, expected: Any) -> None:
         "infnannulltruefalse", lambda: "ok", variables_as_strings=False
     )
 
-    try:
-        cfg_dict = {}
-        for cfg_key, definition, exp in TEST_CONFIG_DATA:
-            can_create, can_access, exception = _get_expected_exc(exp)
-            if can_create or cfg_key == key:
-                assert cfg_key not in cfg_dict, f"duplicated key: {cfg_key}"
-                cfg_dict[cfg_key] = definition
-            if cfg_key == key:
-                break
-        can_create, can_access, exception = _get_expected_exc(expected)
-        if can_create:
-            cfg = OmegaConf.create(cfg_dict)
+    cfg_dict = {}
+    for cfg_key, definition, exp in TEST_CONFIG_DATA:
+        can_create, can_access, exception = _get_expected_exc(exp)
+        if can_create or cfg_key == key:
+            assert cfg_key not in cfg_dict, f"duplicated key: {cfg_key}"
+            cfg_dict[cfg_key] = definition
+        if cfg_key == key:
+            break
+    can_create, can_access, exception = _get_expected_exc(expected)
+    if can_create:
+        cfg = OmegaConf.create(cfg_dict)
+    else:
+        with pytest.raises(exception):
+            OmegaConf.create(cfg_dict)
+
+    if can_access:
+        if dbg_test_access_only:
+            # Only test that we can access, not that it yields the correct value.
+            # This is a debug flag to use when testing new grammars without
+            # corresponding visitor code.
+            getattr(cfg, key)
+        elif expected is math.nan:
+            # Special case since nan != nan.
+            assert math.isnan(getattr(cfg, key))
         else:
-            with pytest.raises(exception):
-                OmegaConf.create(cfg_dict)
-
-        if can_access:
-            if dbg_test_access_only:
-                # Only test that we can access, not that it yields the correct value.
-                # This is a debug flag to use when testing new grammars without
-                # corresponding visitor code.
-                getattr(cfg, key)
-            elif expected is math.nan:
-                # Special case since nan != nan.
-                assert math.isnan(getattr(cfg, key))
-            else:
-                assert getattr(cfg, key) == expected
-        elif can_create:
-            with pytest.raises(exception):
-                getattr(cfg, key)
-
-    finally:
-        OmegaConf.clear_resolvers()
+            assert getattr(cfg, key) == expected
+    elif can_create:
+        with pytest.raises(exception):
+            getattr(cfg, key)
