@@ -2,7 +2,7 @@ import math
 import os
 import random
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import pytest
 
@@ -541,36 +541,9 @@ def test_merge_with_interpolation() -> None:
         OmegaConf.merge(cfg, {"typed_bar": "nope"})
 
 
-def _get_expected_exc(expected: Any) -> Tuple[bool, bool, Optional[Exception]]:
-    """
-    Helper function to obtain information about expected exceptions.
-
-    :param expected: The expected value of a variable, as in `TEST_CONFIG_DATA`.
-        If *creating* a config with this variable is expected to raise an exception,
-        then this value should be a tuple `(False, Exception)`.
-        If *accessing* this variable is expected to raise an exception, then this
-        value should be a tuple `(True, Exception)`.
-    :return: A tuple `(can_create, can_access, exception)` where:
-        * `can_create` indicates whether a config can be created with this variable
-        * `can_access` indicates whether this variable can be accessed
-        * `exception` is the expected exception (None if both booleans are False)
-    """
-    can_create = can_access = True
-    exception = None
-    if (
-        isinstance(expected, tuple)
-        and len(expected) == 2
-        and isinstance(expected[1], type)
-        and issubclass(expected[1], Exception)
-    ):
-        can_create, exception = expected
-        can_access = False
-    return can_create, can_access, exception
-
-
 # Config data used to run many interpolation tests. Each 3-element tuple
 # contains the config key, its value , and its expected value after
-# interpolations are resolved (for exceptions, see `_get_expected_exc()`).
+# interpolations are resolved (possibly an exception class).
 # If the expected value is the ellipsis ... then it is expected to be the
 # same as the definition.
 # Order matters! (each entry should only depend on those above)
@@ -631,7 +604,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("list_access_2", "${identity:${prim_list.1},${prim_list.2}}", ["a", 1.1]),
     ("dict_access", "${prim_dict.a}", 0),
     ("bool_like_keys", "${FalsE.TruE}", True),
-    ("invalid_type", "${prim_dict.${float}}", (True, InterpolationTypeError)),
+    ("invalid_type", "${prim_dict.${float}}", InterpolationTypeError),
     # Resolver interpolations.
     ("env_int", "${env:OMEGACONF_TEST_ENV_INT}", 123),
     ("env_missing_str", "${env:OMEGACONF_TEST_MISSING,miss}", "miss"),
@@ -641,17 +614,13 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("space_in_args", "${identity:a, b c}", ["a", "b c"]),
     ("list_as_input", "${identity:[a, b], 0, [1.1]}", [["a", "b"], 0, [1.1]]),
     ("dict_as_input", "${identity:{'a': 1.1, b: b}}", {"a": 1.1, "b": "b"}),
-    (
-        "dict_typo_colons",
-        "${identity:{'a': 1.1, b:: b}}",
-        (True, InterpolationSyntaxError),
-    ),
-    ("dict_unhashable", "${identity:{[0]: 1}}", (True, TypeError)),
-    ("missing_resolver", "${MiSsInG_ReSoLvEr:0}", (True, UnsupportedInterpolationType)),
-    ("non_str_resolver", "${${bool}:}", (True, InterpolationTypeError)),
+    ("dict_typo_colons", "${identity:{'a': 1.1, b:: b}}", InterpolationSyntaxError,),
+    ("dict_unhashable", "${identity:{[0]: 1}}", TypeError),
+    ("missing_resolver", "${MiSsInG_ReSoLvEr:0}", UnsupportedInterpolationType),
+    ("non_str_resolver", "${${bool}:}", InterpolationTypeError),
     ("resolver_special", "${infnannulltruefalse:}", "ok"),
     # Unmatched braces.
-    ("missing_brace", "${identity:${prim_str}", (True, InterpolationSyntaxError)),
+    ("missing_brace", "${identity:${prim_str}", InterpolationSyntaxError),
     ("extra_brace", "${identity:${prim_str}}}", "hi}"),
     # String interpolations (top-level).
     ("str_top_basic", "bonjour ${prim_str}", "bonjour hi"),
@@ -686,25 +655,21 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_top_trailing_escapes", "${prim_str}" + "\\" * 5, "hi" + "\\" * 3),
     ("str_top_concat_interpolations", "${true}${float}", "True1.1"),
     # Quoted strings (within interpolations).
-    (
-        "str_no_other",
-        "${identity:hi_${prim_str_space}}",
-        (True, InterpolationSyntaxError),
-    ),
+    ("str_no_other", "${identity:hi_${prim_str_space}}", InterpolationSyntaxError,),
     (
         "str_quoted_double",
         '${identity:"I say "${prim_str_space}}',
-        (True, InterpolationSyntaxError),
+        InterpolationSyntaxError,
     ),
     (
         "str_quoted_single",
         "${identity:'I say '${prim_str_space}}",
-        (True, InterpolationSyntaxError),
+        InterpolationSyntaxError,
     ),
     (
         "str_quoted_mixed",
         "${identity:'I '\"say \"${prim_str_space}}",
-        (True, InterpolationSyntaxError),
+        InterpolationSyntaxError,
     ),
     ("str_quoted_int", "${identity:'123'}", "123"),
     ("str_quoted_null", "${identity:'null'}", "null"),
@@ -730,12 +695,12 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ),
     ("str_equal_noquote", "${identity:a,=b}", ["a", "=b"],),
     ("str_quoted_equal", "${identity:a,'=b'}", ["a", "=b"]),
-    ("str_quoted_too_many_1", "${identity:''a'}", (True, InterpolationSyntaxError)),
-    ("str_quoted_too_many_2", "${identity:'a''}", (True, InterpolationSyntaxError)),
-    ("str_quoted_too_many_3", "${identity:''a''}", (True, InterpolationSyntaxError)),
+    ("str_quoted_too_many_1", "${identity:''a'}", InterpolationSyntaxError),
+    ("str_quoted_too_many_2", "${identity:'a''}", InterpolationSyntaxError),
+    ("str_quoted_too_many_3", "${identity:''a''}", InterpolationSyntaxError),
     # Unquoted strings (within interpolations).
     ("str_dollar", "${identity:$}", "$"),
-    ("str_dollar_inter", "${identity:$$${prim_str}}", (True, InterpolationSyntaxError)),
+    ("str_dollar_inter", "${identity:$$${prim_str}}", InterpolationSyntaxError),
     ("str_backslash_noesc", r"${identity:ab\cd}", r"ab\cd"),
     ("str_esc_inter_1", r"${identity:\${foo\}}", "${foo}"),
     ("str_esc_inter_2", r"${identity:\${}", "${"),
@@ -777,12 +742,12 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("null_chain", "${null}", None),
     ("true_chain", "${true}", True),
     ("int_chain", "${int}", 123),
-    ("list_chain_1", "${${prim_list}.0}", (True, InterpolationTypeError)),
-    ("dict_chain_1", "${${prim_dict}.a}", (True, InterpolationTypeError)),
+    ("list_chain_1", "${${prim_list}.0}", InterpolationTypeError),
+    ("dict_chain_1", "${${prim_dict}.a}", InterpolationTypeError),
     ("prim_list_copy", "${prim_list}", [-1, "a", 1.1]),  # for below
     ("prim_dict_copy", "${prim_dict}", {"a": 0, "b": 1}),  # for below
-    ("list_chain_2", "${prim_list_copy.0}", (True, ConfigKeyError)),
-    ("dict_chain_2", "${prim_dict_copy.a}", (True, ConfigKeyError)),
+    ("list_chain_2", "${prim_list_copy.0}", ConfigKeyError),
+    ("dict_chain_2", "${prim_dict_copy.a}", ConfigKeyError),
     # Nested interpolations.
     ("ref_prim_str", "prim_str", "prim_str"),
     ("nested_simple", "${${ref_prim_str}}", "hi"),
@@ -798,42 +763,38 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     (
         "nested_resolver_combined",
         "${id${id_partial}:a, b, c}",
-        (True, InterpolationSyntaxError),
+        InterpolationSyntaxError,
     ),
     # ##### Unusual / edge cases below #####
     # Unquoted `.` and/or `:` on the left of a string interpolation.
-    (
-        "str_other_left",
-        "${identity:.:${prim_str_space}}",
-        (True, InterpolationSyntaxError),
-    ),
+    ("str_other_left", "${identity:.:${prim_str_space}}", InterpolationSyntaxError,),
     # Quoted interpolation (=> not actually an interpolation).
     ("fake_interpolation", "'${prim_str}'", "'hi'"),
     # Same as previous, but combined with a "real" interpolation.
     (
         "fake_and_real_interpolations",
         "'${'${identity:prim_str}'}'",
-        (True, InterpolationSyntaxError),
+        InterpolationSyntaxError,
     ),
     # Un-matched top-level opening brace in quoted ${
     (
         "interpolation_in_quoted_str",
         "'${'${identity:prim_str}",
-        (True, InterpolationSyntaxError),
+        InterpolationSyntaxError,
     ),
     # Special IDs as keys.
     ("None", {"True": 1}, ...),
     ("special_key_exact_spelling", "${None.True}", 1),
-    ("special_key_alternate_not_a_container", "${null.true}", (True, ConfigKeyError)),
-    ("special_key_alternate_missing", "${NuLL.trUE}", (True, ConfigKeyError)),
-    ("special_key_quoted", "${'None'.'True'}", (True, InterpolationSyntaxError)),
-    ("special_key_quoted_bad", "${'None.True'}", (True, InterpolationSyntaxError)),
+    ("special_key_alternate_not_a_container", "${null.true}", ConfigKeyError),
+    ("special_key_alternate_missing", "${NuLL.trUE}", ConfigKeyError),
+    ("special_key_quoted", "${'None'.'True'}", InterpolationSyntaxError),
+    ("special_key_quoted_bad", "${'None.True'}", InterpolationSyntaxError),
     # Resolvers with special IDs (resolvers are registered with all of these strings).
-    ("int_resolver_quoted", "${'0':1,2,3}", (True, InterpolationSyntaxError)),
-    ("int_resolver_noquote", "${0:1,2,3}", (True, InterpolationSyntaxError)),
-    ("float_resolver_quoted", "${'1.1':1,2,3}", (True, InterpolationSyntaxError)),
-    ("float_resolver_noquote", "${1.1:1,2,3}", (True, InterpolationSyntaxError)),
-    ("float_resolver_exp", "${1e1:1,2,3}", (True, InterpolationSyntaxError)),
+    ("int_resolver_quoted", "${'0':1,2,3}", InterpolationSyntaxError),
+    ("int_resolver_noquote", "${0:1,2,3}", InterpolationSyntaxError),
+    ("float_resolver_quoted", "${'1.1':1,2,3}", InterpolationSyntaxError),
+    ("float_resolver_noquote", "${1.1:1,2,3}", InterpolationSyntaxError),
+    ("float_resolver_exp", "${1e1:1,2,3}", InterpolationSyntaxError),
     ("bool_resolver_bad_case", "${FALSE:1,2,3}", ["FALSE", 1, 2, 3]),
     ("bool_resolver_good_case", "${True:1,2,3}", ["True", 1, 2, 3]),
     ("null_resolver", "${null:1,2,3}", ["null", 1, 2, 3]),
@@ -854,18 +815,14 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
         {True: True, "false": "false"},
     ),
     # Having an unquoted string made only of `.` and `:`.
-    ("str_otheronly_noquote", "${identity:a, .:}", (True, InterpolationSyntaxError)),
+    ("str_otheronly_noquote", "${identity:a, .:}", InterpolationSyntaxError),
     # Using an integer as config key.
     ("0", 42, ...),
     ("1", {"2": 12}, ...),
     ("int_key_in_interpolation_noquote", "${0}", 42),
-    ("int_key_in_interpolation_quoted", "${'0'}", (True, InterpolationSyntaxError)),
+    ("int_key_in_interpolation_quoted", "${'0'}", InterpolationSyntaxError),
     ("int_key_in_interpolation_x2_noquote", "${1.2}", 12),
-    (
-        "int_key_in_interpolation_x2_quoted",
-        "${'1.2'}",
-        (True, InterpolationSyntaxError),
-    ),
+    ("int_key_in_interpolation_x2_quoted", "${'1.2'}", InterpolationSyntaxError,),
 ]
 
 
@@ -909,20 +866,16 @@ def test_all_interpolations(restore_resolvers: Any, key: str, expected: Any) -> 
 
     cfg_dict = {}
     for cfg_key, definition, exp in TEST_CONFIG_DATA:
-        can_create, can_access, exception = _get_expected_exc(exp)
-        if can_create or cfg_key == key:
-            assert cfg_key not in cfg_dict, f"duplicated key: {cfg_key}"
-            cfg_dict[cfg_key] = definition
+        assert cfg_key not in cfg_dict, f"duplicated key: {cfg_key}"
+        cfg_dict[cfg_key] = definition
         if cfg_key == key:
             break
-    can_create, can_access, exception = _get_expected_exc(expected)
-    if can_create:
-        cfg = OmegaConf.create(cfg_dict)
-    else:
-        with pytest.raises(exception):
-            OmegaConf.create(cfg_dict)
+    cfg = OmegaConf.create(cfg_dict)
 
-    if can_access:
+    if isinstance(expected, type) and issubclass(expected, Exception):
+        with pytest.raises(expected):
+            getattr(cfg, key)
+    else:
         if dbg_test_access_only:
             # Only test that we can access, not that it yields the correct value.
             # This is a debug flag to use when testing new grammars without
@@ -933,6 +886,3 @@ def test_all_interpolations(restore_resolvers: Any, key: str, expected: Any) -> 
             assert math.isnan(getattr(cfg, key))
         else:
             assert getattr(cfg, key) == expected
-    elif can_create:
-        with pytest.raises(exception):
-            getattr(cfg, key)
