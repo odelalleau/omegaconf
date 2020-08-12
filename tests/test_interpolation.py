@@ -174,6 +174,14 @@ def test_env_default_interpolation_env_exist() -> None:
     assert c.path == "/test/1234"
 
 
+def test_env_is_not_cached() -> None:
+    os.environ["foobar"] = "1234"
+    c = OmegaConf.create({"foobar": "${env:foobar}"})
+    before = c.foobar
+    os.environ["foobar"] = "3456"
+    assert c.foobar != before
+
+
 @pytest.mark.parametrize(  # type: ignore
     "value,expected",
     [
@@ -238,6 +246,7 @@ def test_register_resolver_access_config(restore_resolvers: Any) -> None:
         "len",
         lambda value, *, root: len(OmegaConf.select(root, value)),
         config_arg="root",
+        use_cache=False,
     )
     c = OmegaConf.create({"list": [1, 2, 3], "list_len": "${len:list}"})
     assert c.list_len == 3
@@ -248,6 +257,7 @@ def test_register_resolver_access_parent(restore_resolvers: Any) -> None:
         "get_sibling",
         lambda sibling, *, parent: getattr(parent, sibling),
         parent_arg="parent",
+        use_cache=False,
     )
     c = OmegaConf.create(
         """
@@ -259,6 +269,59 @@ def test_register_resolver_access_parent(restore_resolvers: Any) -> None:
         """
     )
     assert c.root.foo.bar.baz1 == "useful data"
+
+
+def test_register_resolver_access_parent_no_cache(restore_resolvers: Any) -> None:
+    OmegaConf.register_resolver(
+        "add_noise_to_sibling",
+        lambda sibling, *, parent: random.uniform(0, 1) + getattr(parent, sibling),
+        parent_arg="parent",
+        use_cache=False,
+    )
+    c = OmegaConf.create(
+        """
+        root:
+            foo:
+                baz1: "${add_noise_to_sibling:baz2}"
+                baz2: 1
+            bar:
+                baz1: "${add_noise_to_sibling:baz2}"
+                baz2: 1
+        """
+    )
+    assert c.root.foo.baz2 == c.root.bar.baz2  # make sure we test what we want to test
+    assert c.root.foo.baz1 != c.root.foo.baz1  # same node (regular "no cache" behavior)
+    assert c.root.foo.baz1 != c.root.bar.baz1  # same args but different parents
+
+
+def test_register_resolver_cache_warnings(restore_resolvers: Any) -> None:
+    with pytest.warns(UserWarning):
+        OmegaConf.register_resolver(
+            "test_warning_parent", lambda *, parent: None, parent_arg="parent"
+        )
+
+    with pytest.warns(UserWarning):
+        OmegaConf.register_resolver(
+            "test_warning_config", lambda *, config: None, config_arg="config"
+        )
+
+
+def test_register_resolver_cache_errors(restore_resolvers: Any) -> None:
+    with pytest.raises(NotImplementedError):
+        OmegaConf.register_resolver(
+            "test_error_parent",
+            lambda *, parent: None,
+            parent_arg="parent",
+            use_cache=True,
+        )
+
+    with pytest.raises(NotImplementedError):
+        OmegaConf.register_resolver(
+            "test_error_config",
+            lambda *, config: None,
+            config_arg="config",
+            use_cache=True,
+        )
 
 
 def test_resolver_cache_1(restore_resolvers: Any) -> None:
@@ -309,6 +372,14 @@ def test_resolver_cache_3_dict_list(restore_resolvers: Any) -> None:
     assert c.mixed1 == c.mixed1
     assert c.mixed2 == c.mixed2
     assert c.mixed1 != c.mixed2
+
+
+def test_resolver_no_cache(restore_resolvers: Any) -> None:
+    OmegaConf.register_resolver(
+        "random", lambda _: random.uniform(0, 1), use_cache=False
+    )
+    c = OmegaConf.create(dict(k="${random:_}"))
+    assert c.k != c.k
 
 
 @pytest.mark.parametrize(  # type: ignore
