@@ -203,7 +203,7 @@ def test_env_is_not_cached() -> None:
         (":1234", ":1234"),
         ("/1234", "/1234"),
         # yaml strings are not getting parsed by the env resolver
-        ("foo: bar", "foo: bar"),
+        ("foo: bar", "foo:bar"),  # FIXME
         ("foo: \n - bar\n - baz", "foo: \n - bar\n - baz"),
     ],
 )
@@ -358,10 +358,10 @@ def test_resolver_cache_3_dict_list(restore_resolvers: Any) -> None:
             lst1="${random:[0, 1]}",
             lst2="${random:[0, 1]}",
             lst3="${random:[]}",
-            dct1="${random:{0: 1, 1: 2}}",
-            dct2="${random:{1: 2, 0: 1}}",
-            mixed1="${random:{0: [1.1], 1: {a: true, b: false, c: null, d: []}}}",
-            mixed2="${random:{0: [1.1], 1: {b: false, c: null, a: true, d: []}}}",
+            dct1="${random:{a: 1, b: 2}}",
+            dct2="${random:{b: 2, a: 1}}",
+            mixed1="${random:{x: [1.1], y: {a: true, b: false, c: null, d: []}}}",
+            mixed2="${random:{x: [1.1], y: {b: false, c: null, a: true, d: []}}}",
         )
     )
     assert c.lst1 == c.lst1
@@ -390,13 +390,13 @@ def test_resolver_no_cache(restore_resolvers: Any) -> None:
             lambda *args: args,
             "escape_comma",
             "${my_resolver:cat\\, do g}",
-            ("cat, do g",),
+            ("cat\\", "dog"),
         ),
         (
             lambda *args: args,
             "escape_whitespace",
             "${my_resolver:cat\\, do g}",
-            ("cat, do g",),
+            ("cat\\", "dog"),
         ),
         (lambda: "zero", "zero_arg", "${my_resolver:}", "zero"),
     ],
@@ -456,7 +456,7 @@ def test_clear_cache(restore_resolvers: Any) -> None:
 
 
 def test_supported_chars() -> None:
-    supported_chars = "abc123`~!@#$%^&*()-_=+\\|;.<>/?"
+    supported_chars = "abc123_/:-\\+.$*"
     c = OmegaConf.create(dict(dir1="${copy:" + supported_chars + "}"))
 
     OmegaConf.register_resolver("copy", lambda x: x)
@@ -660,13 +660,13 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("true", "${identity:TrUe}", True),
     ("false", "${identity:falsE}", False),
     ("truefalse", "${identity:true_false}", "true_false"),
-    ("unquoted_str_space", "${identity:hello world}", "hello world"),
-    ("unquoted_str_esc_space", r"${identity:\ hello\ world\ }", " hello world "),
-    ("unquoted_str_esc_comma", r"${identity:hello\, world}", "hello, world"),
-    ("unquoted_other_char", f"${{identity:{chr(200)}}}", chr(200)),
-    ("unquoted_emoji", f"${{identity:{chr(129299)}}}", chr(129299)),
+    ("unquoted_str_space", "${identity:hello world}", "helloworld"),
+    ("unquoted_str_esc_space", r"${identity:\ hello\ world\ }", "\\hello\\world\\"),
+    ("unquoted_str_esc_comma", r"${identity:hello\, world}", ["hello\\", "world"]),
+    ("unquoted_other_char", f"${{identity:{chr(200)}}}", InterpolationSyntaxError),
+    ("unquoted_emoji", f"${{identity:{chr(129299)}}}", InterpolationSyntaxError),
     ("unquoted_dot", "${identity:.}", "."),
-    ("unquoted_esc", r"${identity:\{}", "{"),
+    ("unquoted_esc", r"${identity:\{}", InterpolationSyntaxError),
     ("quoted_str_single", "${identity:'!@#$%^&*()[]:.,\"'}", '!@#$%^&*()[]:.,"',),
     ("quoted_str_double", '${identity:"!@#$%^&*()[]:.,\'"}', "!@#$%^&*()[]:.,'",),
     ("quote_outer_ws_single", "${identity: '  a \t'}", "  a \t"),
@@ -710,11 +710,12 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("env_missing_int", "${env:OMEGACONF_TEST_MISSING,123}", 123),
     ("env_missing_float", "${env:OMEGACONF_TEST_MISSING,1e-2}", 0.01),
     ("env_missing_quoted_int", "${env:OMEGACONF_TEST_MISSING,'1'}", "1"),
-    ("space_in_args", "${identity:a, b c}", ["a", "b c"]),
+    ("space_in_args", "${identity:a, b c}", ["a", "bc"]),
     ("list_as_input", "${identity:[a, b], 0, [1.1]}", [["a", "b"], 0, [1.1]]),
-    ("dict_as_input", "${identity:{'a': 1.1, b: b}}", {"a": 1.1, "b": "b"}),
+    ("dict_as_input_1", "${identity:{a: 1.1, b: b}}", {"a": 1.1, "b": "b"}),
+    ("dict_as_input_2", "${identity:{'a': 1.1, b: b}}", InterpolationSyntaxError),
     ("dict_typo_colons", "${identity:{'a': 1.1, b:: b}}", InterpolationSyntaxError,),
-    ("dict_unhashable", "${identity:{[0]: 1}}", TypeError),
+    ("dict_unhashable", "${identity:{[0]: 1}}", InterpolationSyntaxError),
     ("missing_resolver", "${MiSsInG_ReSoLvEr:0}", UnsupportedInterpolationType),
     ("non_str_resolver", "${${bool}:}", InterpolationTypeError),
     ("resolver_special", "${infnannulltruefalse:}", "ok"),
@@ -782,17 +783,13 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
         "L=[-1, 'a', 1.1]",
     ),
     ("str_quoted_esc_single_1", r"${identity:'ab\'cd\'\'${prim_str}'}", "ab'cd''hi"),
-    ("str_quoted_esc_single_2", "${identity:'\"\\\\\\${foo}\\ '}", r'"\${foo}\ '),
+    ("str_quoted_esc_single_2", "${identity:'\"\\\\\\\\\\${foo}\\\\ '}", r'"\${foo}\ '),
     ("str_quoted_esc_double", r'${identity:"ab\"cd\"\"${prim_str}"}', 'ab"cd""hi'),
-    ("str_quoted_esc_double_2", '${identity:"\'\\\\\\${foo}\\ "}', r"'\${foo}\ "),
+    ("str_quoted_esc_double_2", '${identity:"\'\\\\\\\\\\${foo}\\ "}', r"'\${foo}\ "),
     ("str_quoted_backslash_noesc_single", r"${identity:'a\b'}", r"a\b"),
     ("str_quoted_backslash_noesc_double", r'${identity:"a\b"}', r"a\b"),
-    (
-        "str_legal_noquote",
-        r"${identity:a./-%#?&@,\ \,\:b\{\}\[\]  \ }",
-        ["a./-%#?&@", " ,:b{}[]   "],
-    ),
-    ("str_equal_noquote", "${identity:a,=b}", ["a", "=b"],),
+    ("str_legal_noquote", "${identity:a/-\\+.$*, \\\\}", ["a/-\\+.$*", "\\"]),
+    ("str_equal_noquote", "${identity:a,=b}", InterpolationSyntaxError),
     ("str_quoted_equal", "${identity:a,'=b'}", ["a", "=b"]),
     ("str_quoted_too_many_1", "${identity:''a'}", InterpolationSyntaxError),
     ("str_quoted_too_many_2", "${identity:'a''}", InterpolationSyntaxError),
@@ -801,19 +798,29 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_dollar", "${identity:$}", "$"),
     ("str_dollar_inter", "${identity:$$${prim_str}}", InterpolationSyntaxError),
     ("str_backslash_noesc", r"${identity:ab\cd}", r"ab\cd"),
-    ("str_esc_inter_1", r"${identity:\${foo\}}", "${foo}"),
-    ("str_esc_inter_2", r"${identity:\${}", "${"),
-    ("str_esc_brace", r"${identity:$\{foo\}}", "${foo}"),
+    ("str_esc_inter_1", r"${identity:\${foo\}}", InterpolationSyntaxError),
+    ("str_esc_inter_2", r"${identity:\${}", InterpolationSyntaxError),
+    ("str_esc_brace", r"${identity:$\{foo\}}", InterpolationSyntaxError),
     ("str_esc_backslash", r"${identity:\\}", "\\"),
-    ("str_esc_quotes", "${identity:\\'\\\"}", "'\""),
-    ("str_esc_many", r"${identity:\\,\,\{,\]\null}", ["\\", ",{", r"]\null"]),
-    ("str_esc_mixed", r"${identity:\,\:\\\{foo\}\[\]}", r",:\{foo}[]"),
+    ("str_esc_quotes", "${identity:\\'\\\"}", InterpolationSyntaxError),
+    ("str_esc_many", r"${identity:\\,\,\{,\]\null}", InterpolationSyntaxError),
+    ("str_esc_mixed", r"${identity:\,\:\\\{foo\}\[\]}", InterpolationSyntaxError),
     # Structured interpolations.
     ("list", "${identity:[0, 1]}", [0, 1]),
     (
-        "dict",
+        "dict_1",
+        "${identity:{x: 1, a: 'b', y: 1e2, null2: 0.1, true3: false, inf4: true}}",
+        {"x": 1, "a": "b", "y": 100.0, "null2": 0.1, "true3": False, "inf4": True},
+    ),
+    (
+        "dict_2",
         "${identity:{0: 1, 'a': 'b', 1.1: 1e2, null: 0.1, true: false, -inf: true}}",
-        {0: 1, "a": "b", 1.1: 100.0, None: 0.1, True: False, -math.inf: True},
+        InterpolationSyntaxError,
+    ),
+    (
+        "dict_with_interpolation_key",
+        "${identity:{${prim_str}: 0, ${null}: 1}}",
+        {"hi": 0, None: 1},
     ),
     ("empties", "${identity:[],{}}", [[], {}]),
     (
@@ -833,9 +840,14 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
         ],
     ),
     (
-        "structured_deep",
+        "structured_deep_1",
+        "${identity:{null0: [0, 3.14, false], true1: {a: [0, 1, 2], b: {}}}}",
+        {"null0": [0, 3.14, False], "true1": {"a": [0, 1, 2], "b": {}}},
+    ),
+    (
+        "structured_deep_2",
         '${identity:{null: [0, 3.14, false], true: {"a": [0, 1, 2], "b": {}}}}',
-        {None: [0, 3.14, False], True: {"a": [0, 1, 2], "b": {}}},
+        InterpolationSyntaxError,
     ),
     # Chained interpolations.
     ("null_chain", "${null}", None),
@@ -906,15 +918,15 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     (
         "dict_special_null",
         "${identity:{null: null, 'null': 'null'}}",
-        {None: None, "null": "null"},
+        InterpolationSyntaxError,
     ),
     (
         "dict_special_bool",
         "${identity:{true: true, 'false': 'false'}}",
-        {True: True, "false": "false"},
+        InterpolationSyntaxError,
     ),
     # Having an unquoted string made only of `.` and `:`.
-    ("str_otheronly_noquote", "${identity:a, .:}", InterpolationSyntaxError),
+    ("str_otheronly_noquote", "${identity:a, .:}", ["a", ".:"]),
     # Using an integer as config key.
     ("0", 42, ...),
     ("1", {"2": 12}, ...),

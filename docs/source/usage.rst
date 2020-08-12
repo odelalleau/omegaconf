@@ -370,7 +370,7 @@ You can use literal commas and spaces anywhere by escaping (:code:`\,` and :code
     >>> c.key_trimmed
     'HelloWorld'
     >>> c.escape_whitespace
-    'Hello World'
+    'Hello\\World'
 
 You can take advantage of nested interpolations to perform operations over variables:
 

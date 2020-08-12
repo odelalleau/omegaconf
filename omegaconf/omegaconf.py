@@ -1,6 +1,5 @@
 """OmegaConf module"""
 import copy
-import functools
 import io
 import os
 import pathlib
@@ -107,21 +106,20 @@ def register_default_resolvers() -> None:
         # We obtained a string from the environment variable: we parse it using
         # the grammar (as if it was a resolver argument).
         try:
-            parse_tree = parse(
-                val_str, parser_rule="single_arg", lexer_mode="RESOLVER_ARGS"
-            )
+            parse_tree = parse(val_str, parser_rule="single_arg", lexer_mode="ARGS")
         except InterpolationParseError:
             # Un-parsable => keep original string.
             return val_str
 
         # Resolve the parse tree.
         visitor = ResolveInterpolationVisitor(
-            resolve_func=functools.partial(
-                config._resolve_simple_interpolation,
+            container=config,
+            resolve_args=dict(
                 key=None,
+                parent=None,
                 throw_on_missing=True,
                 throw_on_resolution_failure=True,
-            )
+            ),
         )
         val = visitor.visit(parse_tree)
         return _get_value(val)

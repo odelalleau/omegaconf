@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from functools import partial
 from typing import Any, Dict, Iterator, Optional, Tuple, Type, Union
 
 from ._utils import ValueKind, format_and_raise, get_value_kind
@@ -126,7 +125,7 @@ class Node(ABC):
             parent = self._get_parent()
             assert parent is not None
             key = self._key()
-            rval = parent._resolve_interpolation(
+            rval = parent.resolve_interpolation(
                 parent=parent,
                 key=key,
                 value=self,
@@ -280,7 +279,7 @@ class Container(Node):
         )
         if value is None:
             return root, last_key, value
-        value = root._resolve_interpolation(
+        value = root.resolve_interpolation(
             parent=root,
             key=last_key,
             value=value,
@@ -300,7 +299,7 @@ class Container(Node):
     ) -> Optional["Node"]:
         """
         A "complex" interpolation is any interpolation that cannot be handled by
-        `_resolve_simple_interpolation()`, i.e. that either contains nested
+        `resolve_simple_interpolation()`, i.e. that either contains nested
         interpolations or is not a single "${..}" block.
         """
 
@@ -310,13 +309,13 @@ class Container(Node):
         assert isinstance(value_str, str), (type(value_str), value_str)
 
         inter_visitor = ResolveInterpolationVisitor(
-            resolve_func=partial(
-                self._resolve_simple_interpolation,
+            container=self,
+            resolve_args=dict(
                 key=key,
                 parent=parent,
                 throw_on_missing=throw_on_missing,
                 throw_on_resolution_failure=throw_on_resolution_failure,
-            )
+            ),
         )
 
         resolved = inter_visitor.visit(parse_tree)
@@ -334,15 +333,15 @@ class Container(Node):
             assert isinstance(resolved, Node)
             return resolved
 
-    def _resolve_simple_interpolation(
+    def resolve_simple_interpolation(
         self,
         key: Any,
         parent: Optional["Container"],
         inter_type: str,
-        inter_key: Tuple[Any],
+        inter_key: Tuple[Any, ...],
         throw_on_missing: bool,
         throw_on_resolution_failure: bool,
-        inputs_str: Optional[Tuple[str]] = None,  # text representation of inputs
+        inputs_str: Optional[Tuple[str, ...]] = None,  # text representation of inputs
     ) -> Optional["Node"]:
         from omegaconf import OmegaConf
 
@@ -394,7 +393,7 @@ class Container(Node):
                 else:
                     return None
 
-    def _resolve_interpolation(
+    def resolve_interpolation(
         self,
         parent: Optional["Container"],
         key: Any,

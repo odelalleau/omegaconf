@@ -17,7 +17,7 @@ options {tokenVocab = InterpolationLexer;}
 
 // Main rules used to parse OmegaConf strings.
 root: toplevel EOF;
-single_arg: item_no_outer_ws EOF;
+single_arg: element EOF;
 
 // Top-level: strings (that need not be parsed), potentially mixed with interpolations.
 toplevel: toplevel_str | (toplevel_str? (interpolation toplevel_str?)+);
@@ -25,29 +25,35 @@ toplevel_str: (ESC | ESC_INTER | TOP_CHR | TOP_STR)+;
 
 // Interpolations.
 interpolation: interpolation_node | interpolation_resolver;
-interpolation_node: INTERPOLATION_OPEN BEGIN_WS?
-                    config_key ((BEGIN_DOT | DOTPATH_DOT) config_key)*
-                    BEGIN_WS? INTERPOLATION_CLOSE;
-interpolation_resolver: INTERPOLATION_OPEN BEGIN_WS?
-                        (interpolation | BEGIN_ID) BEGIN_WS? BEGIN_COLON sequence?
-                        ARGS_BRACE_CLOSE;
-config_key: interpolation | (BEGIN_ID | BEGIN_STR)+ | DOTPATH_OTHER+;
+interpolation_node: INTERPOLATION_OPEN config_key (DOT config_key)* INTERPOLATION_CLOSE;
+interpolation_resolver: INTERPOLATION_OPEN (interpolation | ID) COLON sequence? BRACE_CLOSE;
+
+config_key: interpolation | ID | LIST_INDEX;
+sequence: element (COMMA element)*;
 
 // Data structures.
-sequence: item (ARGS_COMMA item)*;
-bracketed_list: ARGS_BRACKET_OPEN sequence? ARGS_BRACKET_CLOSE;
-dictionary: ARGS_BRACE_OPEN (key_value (ARGS_COMMA key_value)*)? ARGS_BRACE_CLOSE;
-key_value: item ARGS_COLON item;
+listValue: BRACKET_OPEN sequence? BRACKET_CLOSE;                    // [], [1,2,3], [a,b,[1,2]]
+dictValue: BRACE_OPEN (key_value (COMMA key_value)*)? BRACE_CLOSE;  // {}, {a:10,b:20}
 
-// Quoted strings.
-quoted_string: ARGS_QUOTE
-               (interpolation | ESC | ESC_INTER | QUOTED_CHR | QUOTED_STR)+
-               QUOTED_CLOSE;
+key_value: (ID | interpolation) COLON element;
 
 // Individual items used as resolver arguments or within data structures.
-item: ARGS_WS? item_no_outer_ws ARGS_WS?;
-item_no_outer_ws: interpolation | dictionary | bracketed_list | quoted_string | item_unquoted;
-item_unquoted: NULL | BOOL | INT | FLOAT | ESC | ESC_INTER | ARGS_STR        // single primitive,
-    | ((NULL | BOOL | INT | FLOAT | ESC | ESC_INTER | ARGS_STR)              // or concatenation of multiple primitives
-       (NULL | BOOL | INT | FLOAT | ESC | ESC_INTER | ARGS_STR | ARGS_WS)*   // (possibly with spaces in the middle)
-       (NULL | BOOL | INT | FLOAT | ESC | ESC_INTER | ARGS_STR));
+element:
+      primitive
+    | listValue
+    | dictValue
+    | interpolation
+;
+
+primitive:
+      QUOTED_VALUE                                  // 'hello world', "hello world"
+    | (
+          ID                                        // foo_10
+        | NULL                                      // null, NULL
+        | INT                                       // 0, 10, -20, 1_000_000
+        | FLOAT                                     // 3.14, -20.0, 1e-1, -10e3
+        | BOOL                                      // true, TrUe, false, False
+        | OTHER_CHAR                                // /, -, \, +, ., $, *
+        | COLON
+        | ESC                                       // \\
+    )+;
