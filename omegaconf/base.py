@@ -313,6 +313,7 @@ class Container(Node):
             resolve_func=partial(
                 self._resolve_simple_interpolation,
                 key=key,
+                parent=parent,
                 throw_on_missing=throw_on_missing,
                 throw_on_resolution_failure=throw_on_resolution_failure,
             )
@@ -336,6 +337,7 @@ class Container(Node):
     def _resolve_simple_interpolation(
         self,
         key: Any,
+        parent: Optional["Container"],
         inter_type: str,
         inter_key: Tuple[Any],
         throw_on_missing: bool,
@@ -373,7 +375,7 @@ class Container(Node):
             resolver = OmegaConf.get_resolver(inter_type)
             if resolver is not None:
                 try:
-                    value = resolver(root_node, inter_key, inputs_str)
+                    value = resolver(root_node, parent, inter_key, inputs_str)
                     return ValueNode(
                         value=value,
                         parent=self,

@@ -332,6 +332,7 @@ class OmegaConf:
         resolver: Resolver,
         variables_as_strings: bool = True,
         config_arg: Optional[str] = None,
+        parent_arg: Optional[str] = None,
     ) -> None:
         """
         The `variables_as_strings` flag was introduced to preserve backward compatibility
@@ -344,8 +345,13 @@ class OmegaConf:
 
         If provided, `config_arg` should be the name of a keyword (typically keyword-only)
         argument of `resolver` of type `BaseContainer`, that will be bound to the config
-        root when the resolver is called. This allows accessing arbitrary config elements
-        from within the resolver. See `env()` for an example.
+        root when the resolver is called. This allows performing arbitrary operations on
+        the config from within the resolver. See `env()` for an example.
+
+        Similarly, `parent_arg` can be used to bind the corresponding keyword argument
+        of `resolver` (of type `Optional[Container]`) to the parent of the key being
+        processed when the resolver is called. This can be useful for operations involving
+        other config options relative to the current key.
         """
         assert callable(resolver), "resolver must be callable"
         # noinspection PyProtectedMember
@@ -354,7 +360,10 @@ class OmegaConf:
         ), "resolver {} is already registered".format(name)
 
         def resolver_wrapper(
-            config: BaseContainer, key: Tuple[Any, ...], inputs_str: Tuple[str, ...]
+            config: BaseContainer,
+            parent: Optional[Container],
+            key: Tuple[Any, ...],
+            inputs_str: Tuple[str, ...],
         ) -> Any:
             # The `variables_as_strings` warning is triggered when the resolver is
             # called instead of when it is defined, so as to limit the amount of
@@ -377,11 +386,13 @@ class OmegaConf:
             try:
                 val = cache[hashable_key]
             except KeyError:
-                val = cache[hashable_key] = (
-                    resolver(*inputs)
-                    if config_arg is None
-                    else resolver(*inputs, **{config_arg: config})
-                )
+                # Call resolver.
+                optional_args: Dict[str, Optional[Container]] = {}
+                if config_arg is not None:
+                    optional_args[config_arg] = config
+                if parent_arg is not None:
+                    optional_args[parent_arg] = parent
+                val = cache[hashable_key] = resolver(*inputs, **optional_args)
             return val
 
         # noinspection PyProtectedMember
@@ -390,7 +401,11 @@ class OmegaConf:
     @staticmethod
     def get_resolver(
         name: str,
-    ) -> Optional[Callable[[Container, Tuple[Any, ...], Tuple[str, ...]], Any]]:
+    ) -> Optional[
+        Callable[
+            [Container, Optional[Container], Tuple[Any, ...], Tuple[str, ...]], Any
+        ]
+    ]:
         # noinspection PyProtectedMember
         return (
             BaseContainer._resolvers[name] if name in BaseContainer._resolvers else None

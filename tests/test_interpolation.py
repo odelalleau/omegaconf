@@ -233,6 +233,34 @@ def test_register_resolver_1(restore_resolvers: Any) -> None:
     assert c.k == 1000
 
 
+def test_register_resolver_access_config(restore_resolvers: Any) -> None:
+    OmegaConf.register_resolver(
+        "len",
+        lambda value, *, root: len(OmegaConf.select(root, value)),
+        config_arg="root",
+    )
+    c = OmegaConf.create({"list": [1, 2, 3], "list_len": "${len:list}"})
+    assert c.list_len == 3
+
+
+def test_register_resolver_access_parent(restore_resolvers: Any) -> None:
+    OmegaConf.register_resolver(
+        "get_sibling",
+        lambda sibling, *, parent: getattr(parent, sibling),
+        parent_arg="parent",
+    )
+    c = OmegaConf.create(
+        """
+        root:
+            foo:
+                bar:
+                    baz1: "${get_sibling:baz2}"
+                    baz2: useful data
+        """
+    )
+    assert c.root.foo.bar.baz1 == "useful data"
+
+
 def test_resolver_cache_1(restore_resolvers: Any) -> None:
     # resolvers are always converted to stateless idempotent functions
     # subsequent calls to the same function with the same argument will always return the same value.
