@@ -12,7 +12,7 @@ from typing import (
     Union,
 )
 
-from antlr4 import CommonTokenStream, InputStream, TerminalNode
+from antlr4 import CommonTokenStream, InputStream, ParserRuleContext, TerminalNode
 from antlr4.error.ErrorListener import ErrorListener
 
 from .errors import (
@@ -301,6 +301,11 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
             else:
                 assert isinstance(child, TerminalNode)
 
+    def visitSingle_arg(self, ctx: InterpolationParser.Single_argContext) -> Any:
+        # item_no_outer_ws EOF
+        assert ctx.getChildCount() == 2
+        return self.visit(ctx.getChild(0))
+
     def visitToplevel(
         self, ctx: InterpolationParser.ToplevelContext
     ) -> Union[str, Optional["Node"]]:
@@ -338,7 +343,9 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
         return "".join(chrs)
 
 
-def parse(value: str) -> InterpolationParser.RootContext:
+def parse(
+    value: str, parser_rule: str = "root", lexer_mode: Optional[str] = None
+) -> ParserRuleContext:
     """
     Parse interpolated string `value` (and return the parse tree).
     """
@@ -347,6 +354,8 @@ def parse(value: str) -> InterpolationParser.RootContext:
     lexer = InterpolationLexer(istream)
     lexer.removeErrorListeners()
     lexer.addErrorListener(error_listener)
+    if lexer_mode is not None:
+        lexer.mode(getattr(InterpolationLexer, lexer_mode))
     stream = CommonTokenStream(lexer)
     parser = InterpolationParser(stream)
     parser.removeErrorListeners()
@@ -357,4 +366,4 @@ def parse(value: str) -> InterpolationParser.RootContext:
     # from antlr4 import PredictionMode
     # parser._interp.predictionMode = PredictionMode.SLL
 
-    return parser.root()  # type: ignore
+    return getattr(parser, parser_rule)()

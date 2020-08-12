@@ -15,8 +15,11 @@ parser grammar InterpolationParser;
 
 options {tokenVocab = InterpolationLexer;}
 
-// Top-level: strings (that need not be parsed), potentially mixed with interpolations.
+// Main rules used to parse OmegaConf strings.
 root: toplevel EOF;
+single_arg: item_no_outer_ws EOF;
+
+// Top-level: strings (that need not be parsed), potentially mixed with interpolations.
 toplevel: toplevel_str | (toplevel_str? (interpolation toplevel_str?)+);
 toplevel_str: (ESC | ESC_INTER | TOP_CHR | TOP_STR)+;
 

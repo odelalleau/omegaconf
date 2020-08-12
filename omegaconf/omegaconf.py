@@ -1,5 +1,6 @@
 """OmegaConf module"""
 import copy
+import functools
 import io
 import os
 import pathlib
@@ -23,13 +24,11 @@ from typing import (
 )
 
 import yaml
-from typing_extensions import Protocol
 
 from . import DictConfig, ListConfig
 from ._utils import (
     _ensure_container,
     _get_value,
-    decode_primitive,
     format_and_raise,
     get_dict_key_value_types,
     get_list_element_type,
@@ -49,11 +48,13 @@ from ._utils import (
 from .base import Container, Node
 from .basecontainer import BaseContainer
 from .errors import (
+    InterpolationParseError,
     MissingMandatoryValue,
     OmegaConfBaseException,
     UnsupportedInterpolationType,
     ValidationError,
 )
+from .interpolation_parser import ResolveInterpolationVisitor, parse
 from .nodes import (
     AnyNode,
     BooleanNode,
@@ -71,6 +72,8 @@ MISSING: Any = "???"
 #    and creating a DictConfig with None content
 # - in env() to detect between no default value vs a default value set to None
 _EMPTY_MARKER_ = object()
+
+Resolver = Callable[..., Any]
 
 
 def II(interpolation: str) -> Any:
@@ -91,40 +94,41 @@ def SI(interpolation: str) -> Any:
     return interpolation
 
 
-class Resolver0(Protocol):
-    def __call__(self) -> Any:
-        ...
-
-
-class Resolver1(Protocol):
-    def __call__(self, __x1: Any) -> Any:
-        ...
-
-
-class Resolver2(Protocol):
-    def __call__(self, __x1: Any, __x2: Any) -> Any:
-        ...
-
-
-class Resolver3(Protocol):
-    def __call__(self, __x1: Any, __x2: Any, __x3: Any) -> Any:
-        ...
-
-
-Resolver = Union[Resolver0, Resolver1, Resolver2, Resolver3]
-
-
 def register_default_resolvers() -> None:
-    def env(key: str, default: Any = _EMPTY_MARKER_) -> Any:
+    def env(key: str, default: Any = _EMPTY_MARKER_, *, config: BaseContainer) -> Any:
         try:
-            return decode_primitive(os.environ[key])
+            val_str = os.environ[key]
         except KeyError:
             if default is not _EMPTY_MARKER_:
                 return default
             else:
                 raise ValidationError(f"Environment variable '{key}' not found")
 
-    OmegaConf.register_resolver("env", env, variables_as_strings=False)
+        # We obtained a string from the environment variable: we parse it using
+        # the grammar (as if it was a resolver argument).
+        try:
+            parse_tree = parse(
+                val_str, parser_rule="single_arg", lexer_mode="RESOLVER_ARGS"
+            )
+        except InterpolationParseError:
+            # Un-parsable => keep original string.
+            return val_str
+
+        # Resolve the parse tree.
+        visitor = ResolveInterpolationVisitor(
+            resolve_func=functools.partial(
+                config._resolve_simple_interpolation,
+                key=None,
+                throw_on_missing=True,
+                throw_on_resolution_failure=True,
+            )
+        )
+        val = visitor.visit(parse_tree)
+        return _get_value(val)
+
+    OmegaConf.register_resolver(
+        "env", env, config_arg="config", variables_as_strings=False
+    )
 
 
 class OmegaConf:
@@ -324,7 +328,10 @@ class OmegaConf:
 
     @staticmethod
     def register_resolver(
-        name: str, resolver: Resolver, variables_as_strings: bool = True
+        name: str,
+        resolver: Resolver,
+        variables_as_strings: bool = True,
+        config_arg: Optional[str] = None,
     ) -> None:
         """
         The `variables_as_strings` flag was introduced to preserve backward compatibility
@@ -334,6 +341,11 @@ class OmegaConf:
               of its inputs), and triggers a warning
             - `False` is the new behavior (the resolver can take non-string inputs), and
               will become the default in the future
+
+        If provided, `config_arg` should be the name of a keyword (typically keyword-only)
+        argument of `resolver` of type `BaseContainer`, that will be bound to the config
+        root when the resolver is called. This allows accessing arbitrary config elements
+        from within the resolver. See `env()` for an example.
         """
         assert callable(resolver), "resolver must be callable"
         # noinspection PyProtectedMember
@@ -341,7 +353,7 @@ class OmegaConf:
             name not in BaseContainer._resolvers
         ), "resolver {} is already registered".format(name)
 
-        def caching(
+        def resolver_wrapper(
             config: BaseContainer, key: Tuple[Any, ...], inputs_str: Tuple[str, ...]
         ) -> Any:
             # The `variables_as_strings` warning is triggered when the resolver is
@@ -365,11 +377,15 @@ class OmegaConf:
             try:
                 val = cache[hashable_key]
             except KeyError:
-                val = cache[hashable_key] = resolver(*inputs)
+                val = cache[hashable_key] = (
+                    resolver(*inputs)
+                    if config_arg is None
+                    else resolver(*inputs, **{config_arg: config})
+                )
             return val
 
         # noinspection PyProtectedMember
-        BaseContainer._resolvers[name] = caching
+        BaseContainer._resolvers[name] = resolver_wrapper
 
     @staticmethod
     def get_resolver(
