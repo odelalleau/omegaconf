@@ -59,5 +59,6 @@ primitive:
         | BOOL                                      // true, TrUe, false, False
         | OTHER_CHAR                                // /, -, \, +, ., $, *
         | COLON                                     // :
+        | ESC                                       // \\, \, \ , \\t
         | WS                                        // whitespaces
     )+;

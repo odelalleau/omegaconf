@@ -11,6 +11,7 @@ fragment CHAR: [a-zA-Z];
 fragment ID_: (CHAR|'_') (CHAR|DIGIT|'_')*;
 fragment INTERPOLATION_OPEN_: '${';
 fragment WS_: [ \t]+;
+fragment ESC_BACKSLASH_: '\\\\';  // escaped backslash
 
 //////////////
 // TOPLEVEL //
@@ -21,7 +22,7 @@ mode TOPLEVEL;
 INTERPOLATION_OPEN: INTERPOLATION_OPEN_ -> pushMode(INTERPOLATION);
 
 ESC_INTER: '\\${';
-ESC: ('\\\\')+;
+ESC: ESC_BACKSLASH_+;
 
 // The backslash and dollar characters must not be grouped with others, so that
 // we can properly detect the tokens above.
@@ -75,6 +76,8 @@ BRACKET_CLOSE: WS_* ']';
 
 COMMA: WS_* ',' WS_*;
 ARGS_COLON: WS_* ':' WS_* -> type(COLON);
+
+ARGS_ESC: (ESC_BACKSLASH_ | '\\,' | '\\ ' | '\\\t')+ -> type(ESC);
 OTHER_CHAR: [/\-\\+.$*];  // other characters allowed in unquoted strings
 ARGS_WS: WS_ -> type(WS);
 

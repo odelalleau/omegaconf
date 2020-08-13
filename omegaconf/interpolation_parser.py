@@ -271,9 +271,11 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
                 return float(symbol.text)
             elif symbol.type == InterpolationLexer.BOOL:
                 return symbol.text.lower() == "true"
-            assert False
-        # Concatenation of symbols ==> just concatenate their string representation.
-        return "".join(c.symbol.text for c in ctx.getChildren())
+            elif symbol.type == InterpolationLexer.ESC:
+                return self._unescape([ctx.getChild(0)])
+            assert False, symbol.type
+        # Concatenation of symbols ==> un-escape the concatenation.
+        return self._unescape(ctx.getChildren())
 
     def visitSequence(
         self, ctx: InterpolationParser.SequenceContext
@@ -320,7 +322,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
         return "".join(map(str, vals))
 
     def visitToplevel_str(self, ctx: InterpolationParser.Toplevel_strContext) -> str:
-        # ESC_INTER | TOP_BACKSLASH | TOP_DOLLAR | TOP_STR
+        # (ESC | ESC_INTER | TOP_CHAR | TOP_STR)+
         return self._unescape(ctx.getChildren())
 
     def _resolve_quoted_string(self, quoted: str) -> str:
