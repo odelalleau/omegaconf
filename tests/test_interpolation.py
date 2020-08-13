@@ -658,11 +658,21 @@ def test_merge_with_interpolation() -> None:
         OmegaConf.merge(cfg, {"typed_bar": "nope"})
 
 
+def _maybe_create(definition: str) -> Any:
+    """
+    Helper function to create config objects for lists and dictionaries.
+    """
+    if isinstance(definition, (list, dict)):
+        return OmegaConf.create(definition)
+    return definition
+
+
 # Config data used to run many interpolation tests. Each 3-element tuple
 # contains the config key, its value , and its expected value after
 # interpolations are resolved (possibly an exception class).
 # If the expected value is the ellipsis ... then it is expected to be the
-# same as the definition.
+# same as the definition (or `OmegaConf.create()` called on it for lists
+# and dictionaries).
 # Order matters! (each entry should only depend on those above)
 TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     # Not interpolations (just building blocks for below).
@@ -719,6 +729,8 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     # Node interpolations.
     ("list_access_1", "${prim_list.0}", -1),
     ("list_access_2", "${identity:${prim_list.1},${prim_list.2}}", ["a", 1.1]),
+    ("list_access_underscore", "${prim_list.1_000}", ConfigKeyError),
+    ("list_access_negative", "${prim_list.-1}", InterpolationSyntaxError),
     ("dict_access", "${prim_dict.a}", 0),
     ("bool_like_keys", "${FalsE.TruE}", True),
     ("invalid_type", "${prim_dict.${float}}", InterpolationTypeError),
@@ -771,6 +783,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_top_leading_dollars", r"$$${prim_str}", "$$hi"),
     ("str_top_trailing_dollars", r"${prim_str}$$$$", "hi$$$$"),
     ("str_top_leading_escapes", r"\\\\\${prim_str}", r"\\${prim_str}"),
+    ("str_top_middle_escapes", r"abc\\\\\${prim_str}", r"abc\\${prim_str}"),
     ("str_top_trailing_escapes", "${prim_str}" + "\\" * 5, "hi" + "\\" * 3),
     ("str_top_concat_interpolations", "${true}${float}", "True1.1"),
     # Quoted strings (within interpolations).
@@ -807,7 +820,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_quoted_esc_double_2", '${identity:"\'\\\\\\\\\\${foo}\\ "}', r"'\${foo}\ "),
     ("str_quoted_backslash_noesc_single", r"${identity:'a\b'}", r"a\b"),
     ("str_quoted_backslash_noesc_double", r'${identity:"a\b"}', r"a\b"),
-    ("str_legal_noquote", "${identity:a/-\\+.$*, \\\\}", ["a/-\\+.$*", "\\"]),
+    ("str_legal_noquote", "${identity:a/-\\+.$*, \\\\}", ["a/-\\+.$*", "\\\\"]),
     ("str_equal_noquote", "${identity:a,=b}", InterpolationSyntaxError),
     ("str_quoted_equal", "${identity:a,'=b'}", ["a", "=b"]),
     ("str_quoted_too_many_1", "${identity:''a'}", InterpolationSyntaxError),
@@ -820,7 +833,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_esc_inter_1", r"${identity:\${foo\}}", InterpolationSyntaxError),
     ("str_esc_inter_2", r"${identity:\${}", InterpolationSyntaxError),
     ("str_esc_brace", r"${identity:$\{foo\}}", InterpolationSyntaxError),
-    ("str_esc_backslash", r"${identity:\\}", "\\"),
+    ("str_esc_backslash", r"${identity:\\}", "\\\\"),
     ("str_esc_quotes", "${identity:\\'\\\"}", InterpolationSyntaxError),
     ("str_esc_many", r"${identity:\\,\,\{,\]\null}", InterpolationSyntaxError),
     ("str_esc_mixed", r"${identity:\,\:\\\{foo\}\[\]}", InterpolationSyntaxError),
@@ -838,8 +851,8 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ),
     (
         "dict_with_interpolation_key",
-        "${identity:{${prim_str}: 0, ${null}: 1}}",
-        {"hi": 0, None: 1},
+        "${identity:{${prim_str}: 0, ${null}: 1, ${int}: 2}}",
+        {"hi": 0, None: 1, 123: 2},
     ),
     ("empties", "${identity:[],{}}", [[], {}]),
     (
@@ -874,8 +887,8 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("int_chain", "${int}", 123),
     ("list_chain_1", "${${prim_list}.0}", InterpolationTypeError),
     ("dict_chain_1", "${${prim_dict}.a}", InterpolationTypeError),
-    ("prim_list_copy", "${prim_list}", [-1, "a", 1.1]),  # for below
-    ("prim_dict_copy", "${prim_dict}", {"a": 0, "b": 1}),  # for below
+    ("prim_list_copy", "${prim_list}", OmegaConf.create([-1, "a", 1.1])),
+    ("prim_dict_copy", "${prim_dict}", OmegaConf.create({"a": 0, "b": 1})),
     ("list_chain_2", "${prim_list_copy.0}", ConfigKeyError),
     ("dict_chain_2", "${prim_dict_copy.a}", ConfigKeyError),
     # Nested interpolations.
@@ -970,7 +983,9 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
 @pytest.mark.parametrize(  # type: ignore
     "key,expected",
     [
-        pytest.param(key, definition if expected is ... else expected, id=key)
+        pytest.param(
+            key, _maybe_create(definition) if expected is ... else expected, id=key
+        )
         for key, definition, expected in TEST_CONFIG_DATA
     ],
 )
@@ -1026,4 +1041,36 @@ def test_all_interpolations(restore_resolvers: Any, key: str, expected: Any) -> 
             # Special case since nan != nan.
             assert math.isnan(getattr(cfg, key))
         else:
-            assert getattr(cfg, key) == expected
+            value = getattr(cfg, key)
+            assert value == expected
+            # We also check types in particular because instances of `Node` are very
+            # good at mimicking their underlying type's behavior, and it is easy to
+            # fail to notice that the result contains nodes when it should not.
+            _check_is_same_type(value, expected)
+
+
+def _check_is_same_type(value: Any, expected: Any) -> None:
+    """
+    Helper function to validate that types of `value` and `expected are the same.
+
+    This function assumes that `value == expected` holds, and performs a "deep"
+    comparison of types (= it goes into data structures like dictionaries, lists
+    and tuples).
+
+    Note that dictionaries being compared must have keys ordered the same way!
+    """
+    assert type(expected) is type(value)
+    if isinstance(value, (str, int, float)):
+        pass
+    elif isinstance(value, (list, tuple, ListConfig)):
+        for vx, ex in zip(value, expected):
+            _check_is_same_type(vx, ex)
+    elif isinstance(value, (dict, DictConfig)):
+        for (vk, vv), (ek, ev) in zip(value.items(), expected.items()):
+            assert vk == ek, "dictionaries are not ordered the same"
+            _check_is_same_type(vk, ek)
+            _check_is_same_type(vv, ev)
+    elif value is None:
+        assert expected is None
+    else:
+        raise NotImplementedError(type(value))

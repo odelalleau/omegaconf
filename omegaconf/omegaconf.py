@@ -107,7 +107,7 @@ def register_default_resolvers() -> None:
         # We obtained a string from the environment variable: we parse it using
         # the grammar (as if it was a resolver argument).
         try:
-            parse_tree = parse(val_str, parser_rule="single_arg", lexer_mode="ARGS")
+            parse_tree = parse(val_str, parser_rule="single_element", lexer_mode="ARGS")
         except InterpolationParseError:
             # Un-parsable: check if it contains an interpolation, and if yes parse
             # it as a top-level string. Otherwise keep it unchanged.

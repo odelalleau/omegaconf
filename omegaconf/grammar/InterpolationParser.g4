@@ -1,27 +1,31 @@
 // Regenerate parser by running 'python setup.py antlr' at project root.
 
 // Maintenance guidelines when modifying this grammar:
-// - To test the parsing abilities of the modified grammer before writing all the
-//   support visitor code, change the test
+//
+// - For initial testing of the parsing abilities of the modified grammer before
+//   writing all the support visitor code, change the test
 //        `tests/test_interpolation.py::test_all_interpolations`
 //   by setting `dbg_test_access_only = True`, and run it. You will also probably
 //   need to comment / hijack the code accesssing the visitor. Tests that expect
 //   errors raised from the visitor will obviously fail.
+//
 // - Keep up-to-date the comments in the visitor (in `interpolation_parser.py`)
 //   that contain grammar excerpts (within each `visit...()` method).
+//
 // - Remember to update the documentation (including the tutorial notebook)
 
 parser grammar InterpolationParser;
 
+// Tokens obtained from the corresponding lexer.
 options {tokenVocab = InterpolationLexer;}
 
 // Main rules used to parse OmegaConf strings.
-root: toplevel EOF;
-single_arg: element EOF;
+config_value: toplevel EOF;
+single_element: element EOF;
 
 // Top-level: strings (that need not be parsed), potentially mixed with interpolations.
 toplevel: toplevel_str | (toplevel_str? (interpolation toplevel_str?)+);
-toplevel_str: (ESC | ESC_INTER | TOP_CHR | TOP_STR)+;
+toplevel_str: (ESC | ESC_INTER | TOP_CHAR | TOP_STR)+;
 
 // Interpolations.
 interpolation: interpolation_node | interpolation_resolver;
@@ -37,7 +41,7 @@ dictValue: BRACE_OPEN (key_value (COMMA key_value)*)? BRACE_CLOSE;  // {}, {a:10
 
 key_value: (ID | interpolation) COLON element;
 
-// Individual items used as resolver arguments or within data structures.
+// Individual elements used as resolver arguments or within data structures.
 element:
       primitive
     | listValue
@@ -55,5 +59,4 @@ primitive:
         | BOOL                                      // true, TrUe, false, False
         | OTHER_CHAR                                // /, -, \, +, ., $, *
         | COLON
-        | ESC                                       // \\
     )+;
