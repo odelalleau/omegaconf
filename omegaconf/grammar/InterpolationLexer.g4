@@ -12,6 +12,7 @@ fragment ID_: (CHAR|'_') (CHAR|DIGIT|'_')*;
 fragment INTERPOLATION_OPEN_: '${';
 fragment ESC_INTER_: '\\${';  // escaped interpolation
 fragment ESC_BACKSLASH_: '\\\\';  // escaped backslash
+fragment WS_: [ \t]+;
 
 /////////////////////////
 // DEFAULT (TOP-LEVEL) //
@@ -36,6 +37,7 @@ INTERPOLATION_CLOSE: '}' -> popMode;
 DOT: '.';
 ID: ID_;
 LIST_INDEX: '0' | [1-9][0-9]*;
+WS: WS_ -> channel(HIDDEN);
 
 //////////
 // ARGS //
@@ -76,7 +78,7 @@ BRACKET_CLOSE: ']';
 COMMA: ',';
 ARGS_COLON: ':' -> type(COLON);
 
-WS: (' ' | '\t')+ -> channel(HIDDEN);
+ARGS_WS: WS_ -> channel(HIDDEN);
 
 QUOTED_VALUE:
       '\'' ('\\\''|.)*? '\'' // Single quotes, can contain escaped single quote : /'

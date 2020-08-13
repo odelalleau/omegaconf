@@ -895,6 +895,17 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
         "${id${id_partial}:a, b, c}",
         InterpolationSyntaxError,
     ),
+    # Whitespaces.
+    ("ws_toplevel", "  \tab  ${prim_str} cd  \t", "  \tab  hi cd  \t"),
+    ("ws_inter_node_outer", "${ \tprim_dict.a  \t}", 0),
+    ("ws_inter_node_around_dot", "${prim_dict .\ta}", 0),
+    ("ws_inter_node_inside_id", "${prim _ dict.a}", InterpolationSyntaxError),
+    ("ws_inter_res_outer", "${\t identity:foo\t  }", "foo"),
+    ("ws_inter_res_around_colon", "${identity\t  : \tfoo}", "foo"),
+    ("ws_inter_res_inside_id", "${id entity:foo}", InterpolationSyntaxError),
+    ("ws_inter_res_inside_args", "${identity:f o o}", "foo"),
+    ("ws_list", "${identity:[\t a,   b,  ''\t  ]}", ["a", "b", ""]),
+    ("ws_dict", "${identity:{\t a   : 1\t  , b:  \t''}}", {"a": 1, "b": ""}),
     # ##### Unusual / edge cases below #####
     # Unquoted `.` and/or `:` on the left of a string interpolation.
     ("str_other_left", "${identity:.:${prim_str_space}}", InterpolationSyntaxError,),
