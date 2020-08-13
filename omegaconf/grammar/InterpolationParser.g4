@@ -58,5 +58,6 @@ primitive:
         | FLOAT                                     // 3.14, -20.0, 1e-1, -10e3
         | BOOL                                      // true, TrUe, false, False
         | OTHER_CHAR                                // /, -, \, +, ., $, *
-        | COLON
+        | COLON                                     // :
+        | WS                                        // whitespaces
     )+;

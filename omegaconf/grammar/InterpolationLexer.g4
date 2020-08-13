@@ -35,13 +35,13 @@ TOP_STR: ~[\\$]+;  // anything else
 mode INTERPOLATION;
 
 BEGIN_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION);
-COLON: ':' -> mode(ARGS);
+COLON: ':' WS_* -> mode(ARGS);
 INTERPOLATION_CLOSE: '}' -> popMode;
 
 DOT: '.';
 ID: ID_;
 LIST_INDEX: INT_UNSIGNED;
-WS: WS_ -> channel(HIDDEN);
+WS: WS_ -> skip;
 
 //////////
 // ARGS //
@@ -50,8 +50,8 @@ WS: WS_ -> channel(HIDDEN);
 mode ARGS;
 
 ARGS_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION);
-BRACE_OPEN: '{' -> pushMode(ARGS);  // must keep track of braces to detect end of interpolation
-BRACE_CLOSE: '}' -> popMode;
+BRACE_OPEN: '{' WS_* -> pushMode(ARGS);  // must keep track of braces to detect end of interpolation
+BRACE_CLOSE: WS_* '}' -> popMode;
 
 // Special keywords.
 NULL: [Nn][Uu][Ll][Ll];  // null
@@ -70,14 +70,13 @@ FLOAT: [+-]? (POINT_FLOAT | EXPONENT_FLOAT | [Ii][Nn][Ff] | [Nn][Aa][Nn]);
 
 ARGS_ID: ID_ -> type(ID);
 
-BRACKET_OPEN: '[';
-BRACKET_CLOSE: ']';
+BRACKET_OPEN: '[' WS_*;
+BRACKET_CLOSE: WS_* ']';
 
-COMMA: ',';
-ARGS_COLON: ':' -> type(COLON);
+COMMA: WS_* ',' WS_*;
+ARGS_COLON: WS_* ':' WS_* -> type(COLON);
 OTHER_CHAR: [/\-\\+.$*];  // other characters allowed in unquoted strings
-
-ARGS_WS: WS_ -> channel(HIDDEN);
+ARGS_WS: WS_ -> type(WS);
 
 QUOTED_VALUE:
       '\'' ('\\\''|.)*? '\'' // Single quotes, can contain escaped single quote : /'
