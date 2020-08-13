@@ -28,6 +28,7 @@ from . import DictConfig, ListConfig
 from ._utils import (
     _ensure_container,
     _get_value,
+    _is_interpolation,
     format_and_raise,
     get_dict_key_value_types,
     get_list_element_type,
@@ -108,8 +109,12 @@ def register_default_resolvers() -> None:
         try:
             parse_tree = parse(val_str, parser_rule="single_arg", lexer_mode="ARGS")
         except InterpolationParseError:
-            # Un-parsable => keep original string.
-            return val_str
+            # Un-parsable: check if it contains an interpolation, and if yes parse
+            # it as a top-level string. Otherwise keep it unchanged.
+            if _is_interpolation(val_str):
+                parse_tree = parse(val_str)
+            else:
+                return val_str
 
         # Resolve the parse tree.
         visitor = ResolveInterpolationVisitor(

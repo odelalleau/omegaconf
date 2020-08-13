@@ -205,12 +205,30 @@ def test_env_is_not_cached() -> None:
         # yaml strings are not getting parsed by the env resolver
         ("foo: bar", "foo:bar"),  # FIXME
         ("foo: \n - bar\n - baz", "foo: \n - bar\n - baz"),
+        # more advanced uses of the grammar
+        ("${other_key}", 123),
+        ("\\${other_key}", "${other_key}"),
+        ("ab ${other_key} cd", "ab 123 cd"),
+        ("ab \\${other_key} cd", "ab ${other_key} cd"),
+        ("ab \\\\${other_key} cd", "ab \\123 cd"),
+        ("ab \\{foo} cd", "ab \\{foo} cd"),
+        ("ab \\\\{foo} cd", "ab \\\\{foo} cd"),
+        ("[1, 2, 3]", [1, 2, 3]),
+        ("{a: 0, b: 1}", {"a": 0, "b": 1}),
+        (
+            "{a: ${other_key}, b: [0, 1, [2, ${other_key}]]}",
+            {"a": 123, "b": [0, 1, [2, 123]]},
+        ),
+        ("  123  ", 123),
+        ("  1 2 3  ", "123"),
+        ("\t[1, 2, 3]\t", [1, 2, 3]),
+        ("'123'", "123"),
     ],
 )
 def test_env_values_are_typed(value: Any, expected: Any) -> None:
     try:
         os.environ["my_key"] = value
-        c = OmegaConf.create(dict(my_key="${env:my_key}"))
+        c = OmegaConf.create(dict(my_key="${env:my_key}", other_key=123))
         assert c.my_key == expected
     finally:
         del os.environ["my_key"]
@@ -705,11 +723,6 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("bool_like_keys", "${FalsE.TruE}", True),
     ("invalid_type", "${prim_dict.${float}}", InterpolationTypeError),
     # Resolver interpolations.
-    ("env_int", "${env:OMEGACONF_TEST_ENV_INT}", 123),
-    ("env_missing_str", "${env:OMEGACONF_TEST_MISSING,miss}", "miss"),
-    ("env_missing_int", "${env:OMEGACONF_TEST_MISSING,123}", 123),
-    ("env_missing_float", "${env:OMEGACONF_TEST_MISSING,1e-2}", 0.01),
-    ("env_missing_quoted_int", "${env:OMEGACONF_TEST_MISSING,'1'}", "1"),
     ("space_in_args", "${identity:a, b c}", ["a", "bc"]),
     ("list_as_input", "${identity:[a, b], 0, [1.1]}", [["a", "b"], 0, [1.1]]),
     ("dict_as_input_1", "${identity:{a: 1.1, b: b}}", {"a": 1.1, "b": "b"}),
@@ -719,6 +732,12 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("missing_resolver", "${MiSsInG_ReSoLvEr:0}", UnsupportedInterpolationType),
     ("non_str_resolver", "${${bool}:}", InterpolationTypeError),
     ("resolver_special", "${infnannulltruefalse:}", "ok"),
+    # Env resolver.
+    ("env_int", "${env:OMEGACONF_TEST_ENV_INT}", 123),
+    ("env_missing_str", "${env:OMEGACONF_TEST_MISSING,miss}", "miss"),
+    ("env_missing_int", "${env:OMEGACONF_TEST_MISSING,123}", 123),
+    ("env_missing_float", "${env:OMEGACONF_TEST_MISSING,1e-2}", 0.01),
+    ("env_missing_quoted_int", "${env:OMEGACONF_TEST_MISSING,'1'}", "1"),
     # Unmatched braces.
     ("missing_brace", "${identity:${prim_str}", InterpolationSyntaxError),
     ("extra_brace", "${identity:${prim_str}}}", "hi}"),
