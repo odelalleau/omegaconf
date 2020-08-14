@@ -407,6 +407,64 @@ You can take advantage of nested interpolations to perform operations over varia
     >>> c.a_plus_b
     3
 
+By default a custom resolver's output is cached, so that when it is called with the same
+inputs we always return the same value. This behavior may be disabled by setting `use_cache=False`:
+
+.. doctest::
+
+    >>> import random; random.seed(1234)
+    >>> OmegaConf.register_resolver("randint",
+    ...                             lambda a, b: random.randint(a, b),
+    ...                             variables_as_strings=False)
+    >>> c = OmegaConf.create({"x": "${randint_nocache:0, 1000}"})
+    >>> c.x
+    989
+    >>> c.x  # same as above thanks to the cache
+    989
+    >>> OmegaConf.register_resolver("randint_nocache",
+    ...                             lambda a, b: random.randint(a, b),
+    ...                             use_cache=False,
+    ...                             variables_as_strings=False)
+    >>> random.seed(1234)
+    >>> c = OmegaConf.create({"x": "${randint_nocache:0, 1000}"})
+    >>> c.x
+    989
+    >>> c.x  # not the same anymore since the cache is disabled
+    796
+
+For more advanced operations on the config, you can allow a resolver to access the config
+object by declaring a `config_arg`
+(note that you cannot use the cache in this case, since the resolver's output may now
+depend on arbitrary parts of the config).
+
+.. doctest::
+
+    >>> OmegaConf.register_resolver("key_exists",
+    ...                             lambda key, *, config: key in config,
+    ...                             config_arg="config",
+    ...                             use_cache=False)
+    >>> c = OmegaConf.create({"a": 1,
+    ...                       "can_process_a": "${key_exists:a}",
+    ...                       "can_process_b": "${key_exists:b}"})
+    >>> print(repr(c.can_process_a))
+    True
+    >>> print(repr(c.can_process_b))
+    False
+
+A similar mechanism can be used to access the parent of the current key being processed,
+by declaring a `parent_arg`. This may be useful to access keys in a relative way:
+
+    >>> OmegaConf.register_resolver(
+    ...         "get_sibling",
+    ...         lambda sibling, *, parent: getattr(parent, sibling),
+    ...         parent_arg="parent",
+    ...         use_cache=False)
+    >>> c = OmegaConf.create(
+    ...         {"foo": {"bar": {"baz1": 123,
+    ...                          "baz2": "${get_sibling:baz1}"}}})
+    >>> c.foo.bar.baz2
+    123
+
 
 Merging configurations
 ----------------------
