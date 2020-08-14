@@ -6,11 +6,9 @@ lexer grammar InterpolationLexer;
 
 
 // Re-usable fragments.
+fragment CHAR: [a-zA-Z];
 fragment DIGIT: [0-9];
 fragment INT_UNSIGNED: '0' | [1-9] (('_')? DIGIT)*;
-fragment CHAR: [a-zA-Z];
-fragment ID_: (CHAR|'_') (CHAR|DIGIT|'_')*;
-fragment INTERPOLATION_OPEN_: '${';
 fragment WS_: [ \t]+;
 fragment ESC_BACKSLASH_: '\\\\';  // escaped backslash
 
@@ -20,7 +18,7 @@ fragment ESC_BACKSLASH_: '\\\\';  // escaped backslash
 
 mode TOPLEVEL;
 
-INTERPOLATION_OPEN: INTERPOLATION_OPEN_ -> pushMode(INTERPOLATION);
+INTERPOLATION_OPEN: '${' -> pushMode(INTERPOLATION);
 
 ESC_INTER: '\\${';
 ESC: ESC_BACKSLASH_+;
@@ -36,12 +34,12 @@ TOP_STR: ~[\\$]+;  // anything else
 
 mode INTERPOLATION;
 
-BEGIN_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION);
+BEGIN_INTER_OPEN: INTERPOLATION_OPEN -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION);
 COLON: ':' WS_? -> mode(ARGS);
 INTERPOLATION_CLOSE: '}' -> popMode;
 
 DOT: '.';
-ID: ID_;
+ID: (CHAR|'_') (CHAR|DIGIT|'_')*;
 LIST_INDEX: INT_UNSIGNED;
 WS: WS_ -> skip;
 
@@ -51,9 +49,16 @@ WS: WS_ -> skip;
 
 mode ARGS;
 
-ARGS_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION);
+// Special characters.
+
+ARGS_INTER_OPEN: INTERPOLATION_OPEN -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION);
 BRACE_OPEN: '{' WS_? -> pushMode(ARGS);  // must keep track of braces to detect end of interpolation
 BRACE_CLOSE: WS_? '}' -> popMode;
+
+COMMA: WS_? ',' WS_?;
+BRACKET_OPEN: '[' WS_?;
+BRACKET_CLOSE: WS_? ']';
+ARGS_COLON: WS_? ':' WS_? -> type(COLON);
 
 // Numbers.
 
@@ -70,19 +75,11 @@ BOOL:
 
 NULL: [Nn][Uu][Ll][Ll];
 
-// Special characters.
-
-BRACKET_OPEN: '[' WS_?;
-BRACKET_CLOSE: WS_? ']';
-
-COMMA: WS_? ',' WS_?;
-ARGS_COLON: WS_? ':' WS_? -> type(COLON);
-
 // Strings.
 
-ARGS_ID: ID_ -> type(ID);
-ARGS_ESC: (ESC_BACKSLASH_ | '\\,' | '\\ ' | '\\\t')+ -> type(ESC);
 OTHER_CHAR: [/\-\\+.$*];  // other characters allowed in unquoted strings
+ARGS_ID: ID -> type(ID);
+ARGS_ESC: (ESC_BACKSLASH_ | '\\,' | '\\ ' | '\\\t')+ -> type(ESC);
 
 ARGS_WS: WS_ -> type(WS);
 
