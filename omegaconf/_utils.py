@@ -316,7 +316,7 @@ class ValueKind(Enum):
 def get_value_kind(
     value: Any, return_parse_tree: bool = False
 ) -> Union[
-    ValueKind, Tuple[ValueKind, Optional[InterpolationParser.Config_valueContext]],
+    ValueKind, Tuple[ValueKind, Optional[InterpolationParser.ConfigValueContext]],
 ]:
     """
     Determine the kind of a value
@@ -330,12 +330,12 @@ def get_value_kind(
     :param return_parse_tree: Whether to also return the interpolation parse tree.
     :return: ValueKind (and optionally the associated interpolation parse tree).
     """
-    parse_tree: Optional[InterpolationParser.Config_valueContext] = None
+    parse_tree: Optional[InterpolationParser.ConfigValueContext] = None
 
     def ret(
         value_kind: ValueKind,
     ) -> Union[
-        ValueKind, Tuple[ValueKind, Optional[InterpolationParser.Config_valueContext]],
+        ValueKind, Tuple[ValueKind, Optional[InterpolationParser.ConfigValueContext]],
     ]:
         if return_parse_tree:
             assert value_kind != ValueKind.INTERPOLATION or parse_tree is not None

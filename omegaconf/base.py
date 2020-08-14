@@ -293,7 +293,7 @@ class Container(Node):
         parent: Optional["Container"],
         value: "Node",
         key: Any,
-        parse_tree: InterpolationParser.Config_valueContext,
+        parse_tree: InterpolationParser.ConfigValueContext,
         throw_on_missing: bool,
         throw_on_resolution_failure: bool,
     ) -> Optional["Node"]:

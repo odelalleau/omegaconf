@@ -121,7 +121,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
     def defaultResult(self) -> List[Any]:
         return []
 
-    def visitConfig_key(self, ctx: InterpolationParser.Config_keyContext) -> str:
+    def visitConfigKey(self, ctx: InterpolationParser.ConfigKeyContext) -> str:
         from ._utils import _get_value
 
         # interpolation | ID | LIST_INDEX
@@ -142,8 +142,8 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
             )
             return child.symbol.text
 
-    def visitConfig_value(
-        self, ctx: InterpolationParser.Config_valueContext
+    def visitConfigValue(
+        self, ctx: InterpolationParser.ConfigValueContext
     ) -> Union[str, Optional["Node"]]:
         assert ctx.getChildCount() == 2  # toplevel EOF
         assert isinstance(ctx.getChild(0), InterpolationParser.ToplevelContext)
@@ -152,10 +152,10 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
     def visitDictValue(
         self, ctx: InterpolationParser.DictValueContext
     ) -> Dict[Any, Any]:
-        # BRACE_OPEN (key_value (COMMA key_value)*)? BRACE_CLOSE
+        # BRACE_OPEN (keyValuePair (COMMA keyValuePair)*)? BRACE_CLOSE
         assert ctx.getChildCount() >= 2
         return dict(
-            self.visitKey_value(ctx.getChild(i))
+            self.visitKeyValuePair(ctx.getChild(i))
             for i in range(1, ctx.getChildCount() - 1, 2)
         )
 
@@ -169,23 +169,23 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
     ) -> Optional["Node"]:
         from .base import Node  # noqa F811
 
-        assert ctx.getChildCount() == 1  # interpolation_node | interpolation_resolver
+        assert ctx.getChildCount() == 1  # interpolationNode | interpolationResolver
         ret = self.visit(ctx.getChild(0))
         assert ret is None or isinstance(ret, Node)
         return ret
 
-    def visitInterpolation_node(
-        self, ctx: InterpolationParser.Interpolation_nodeContext
+    def visitInterpolationNode(
+        self, ctx: InterpolationParser.InterpolationNodeContext
     ) -> Optional["Node"]:
-        # INTERPOLATION_OPEN config_key (DOT config_key)* INTERPOLATION_CLOSE;
+        # INTERPOLATION_OPEN configKey (DOT configKey)* INTERPOLATION_CLOSE;
         assert ctx.getChildCount() >= 3
         res = [self.visit(child) for child in list(ctx.getChildren())[1:-1:2]]
         return self.container.resolve_simple_interpolation(
             inter_type="str:", inter_key=(".".join(res),), **self.resolve_args
         )
 
-    def visitInterpolation_resolver(
-        self, ctx: InterpolationParser.Interpolation_resolverContext
+    def visitInterpolationResolver(
+        self, ctx: InterpolationParser.InterpolationResolverContext
     ) -> Optional["Node"]:
         from ._utils import _get_value
 
@@ -225,8 +225,8 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
             **self.resolve_args,
         )
 
-    def visitKey_value(
-        self, ctx: InterpolationParser.Key_valueContext
+    def visitKeyValuePair(
+        self, ctx: InterpolationParser.KeyValuePairContext
     ) -> Tuple[Any, Any]:
         from ._utils import _get_value
 
@@ -304,9 +304,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
                     and child.symbol.type == InterpolationLexer.COMMA
                 )
 
-    def visitSingle_element(
-        self, ctx: InterpolationParser.Single_elementContext
-    ) -> Any:
+    def visitSingleElement(self, ctx: InterpolationParser.SingleElementContext) -> Any:
         # element EOF
         assert ctx.getChildCount() == 2
         return self.visit(ctx.getChild(0))
@@ -314,7 +312,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
     def visitToplevel(
         self, ctx: InterpolationParser.ToplevelContext
     ) -> Union[str, Optional["Node"]]:
-        # toplevel_str | (toplevel_str? (interpolation toplevel_str?)+)
+        # toplevelStr | (toplevelStr? (interpolation toplevelStr?)+)
         vals = self.visitChildren(ctx)
         if len(vals) == 1 and isinstance(
             ctx.getChild(0), InterpolationParser.InterpolationContext
@@ -328,7 +326,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
         # Concatenation of multiple components.
         return "".join(map(str, vals))
 
-    def visitToplevel_str(self, ctx: InterpolationParser.Toplevel_strContext) -> str:
+    def visitToplevelStr(self, ctx: InterpolationParser.ToplevelStrContext) -> str:
         # (ESC | ESC_INTER | TOP_CHAR | TOP_STR)+
         return self._unescape(ctx.getChildren())
 
@@ -393,7 +391,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
 
 
 def parse(
-    value: str, parser_rule: str = "config_value", lexer_mode: str = "TOPLEVEL"
+    value: str, parser_rule: str = "configValue", lexer_mode: str = "TOPLEVEL"
 ) -> ParserRuleContext:
     """
     Parse interpolated string `value` (and return the parse tree).

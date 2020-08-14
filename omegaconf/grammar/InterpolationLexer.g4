@@ -4,7 +4,8 @@
 
 lexer grammar InterpolationLexer;
 
-// Re-used Fragments.
+
+// Re-usable fragments.
 fragment DIGIT: [0-9];
 fragment INT_UNSIGNED: '0' | [1-9] (('_')? DIGIT)*;
 fragment CHAR: [a-zA-Z];
@@ -54,22 +55,22 @@ ARGS_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTER
 BRACE_OPEN: '{' WS_* -> pushMode(ARGS);  // must keep track of braces to detect end of interpolation
 BRACE_CLOSE: WS_* '}' -> popMode;
 
-// Special keywords.
-NULL: [Nn][Uu][Ll][Ll];  // null
-BOOL:
-      [Tt][Rr][Uu][Ee]      // true
-    | [Ff][Aa][Ll][Ss][Ee]; // false
-
 // Numbers.
-INT: [+-]? INT_UNSIGNED;
 
 fragment POINT_FLOAT: INT_UNSIGNED? '.' DIGIT (('_')? DIGIT)* | INT_UNSIGNED '.';
 fragment EXPONENT_FLOAT: (INT_UNSIGNED | POINT_FLOAT) [eE] [+-]? INT_UNSIGNED;
 FLOAT: [+-]? (POINT_FLOAT | EXPONENT_FLOAT | [Ii][Nn][Ff] | [Nn][Aa][Nn]);
+INT: [+-]? INT_UNSIGNED;
 
-// Strings.
+// Other reserved keywords.
 
-ARGS_ID: ID_ -> type(ID);
+BOOL:
+      [Tt][Rr][Uu][Ee]      // TRUE
+    | [Ff][Aa][Ll][Ss][Ee]; // FALSE
+
+NULL: [Nn][Uu][Ll][Ll];
+
+// Special characters.
 
 BRACKET_OPEN: '[' WS_*;
 BRACKET_CLOSE: WS_* ']';
@@ -77,8 +78,12 @@ BRACKET_CLOSE: WS_* ']';
 COMMA: WS_* ',' WS_*;
 ARGS_COLON: WS_* ':' WS_* -> type(COLON);
 
+// Strings.
+
+ARGS_ID: ID_ -> type(ID);
 ARGS_ESC: (ESC_BACKSLASH_ | '\\,' | '\\ ' | '\\\t')+ -> type(ESC);
 OTHER_CHAR: [/\-\\+.$*];  // other characters allowed in unquoted strings
+
 ARGS_WS: WS_ -> type(WS);
 
 QUOTED_VALUE:
