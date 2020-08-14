@@ -821,6 +821,11 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
         "${identity:'${identity:\"L=${prim_list}\"}'}",
         "L=[-1, 'a', 1.1]",
     ),
+    (
+        "str_quoted_nested",
+        r"${identity:'ab ${identity:\'a@b+${identity:\\'c@d\\'}&&\'}'}",
+        "ab a@b+c@d&&",
+    ),
     ("str_quoted_esc_single_1", r"${identity:'ab\'cd\'\'${prim_str}'}", "ab'cd''hi"),
     ("str_quoted_esc_single_2", "${identity:'\"\\\\\\\\\\${foo}\\\\ '}", r'"\${foo}\ '),
     ("str_quoted_esc_double", r'${identity:"ab\"cd\"\"${prim_str}"}', 'ab"cd""hi'),
