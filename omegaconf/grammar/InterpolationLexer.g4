@@ -37,7 +37,7 @@ TOP_STR: ~[\\$]+;  // anything else
 mode INTERPOLATION;
 
 BEGIN_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION);
-COLON: ':' WS_* -> mode(ARGS);
+COLON: ':' WS_? -> mode(ARGS);
 INTERPOLATION_CLOSE: '}' -> popMode;
 
 DOT: '.';
@@ -52,8 +52,8 @@ WS: WS_ -> skip;
 mode ARGS;
 
 ARGS_INTER_OPEN: INTERPOLATION_OPEN_ -> type(INTERPOLATION_OPEN), pushMode(INTERPOLATION);
-BRACE_OPEN: '{' WS_* -> pushMode(ARGS);  // must keep track of braces to detect end of interpolation
-BRACE_CLOSE: WS_* '}' -> popMode;
+BRACE_OPEN: '{' WS_? -> pushMode(ARGS);  // must keep track of braces to detect end of interpolation
+BRACE_CLOSE: WS_? '}' -> popMode;
 
 // Numbers.
 
@@ -72,11 +72,11 @@ NULL: [Nn][Uu][Ll][Ll];
 
 // Special characters.
 
-BRACKET_OPEN: '[' WS_*;
-BRACKET_CLOSE: WS_* ']';
+BRACKET_OPEN: '[' WS_?;
+BRACKET_CLOSE: WS_? ']';
 
-COMMA: WS_* ',' WS_*;
-ARGS_COLON: WS_* ':' WS_* -> type(COLON);
+COMMA: WS_? ',' WS_?;
+ARGS_COLON: WS_? ':' WS_? -> type(COLON);
 
 // Strings.
 
