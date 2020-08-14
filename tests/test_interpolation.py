@@ -207,9 +207,11 @@ def test_env_is_not_cached() -> None:
         ("foo: \n - bar\n - baz", "foo: \n - bar\n - baz"),
         # more advanced uses of the grammar
         ("${other_key}", 123),
-        ("\\${other_key}", "${other_key}"),
+        ("\\${other_key}", "\\123"),
+        ("'\\${other_key}'", "${other_key}"),
         ("ab ${other_key} cd", "ab 123 cd"),
-        ("ab \\${other_key} cd", "ab ${other_key} cd"),
+        ("ab \\${other_key} cd", "ab \\123 cd"),
+        ("'ab \\${other_key} cd'", "ab ${other_key} cd"),
         ("ab \\\\${other_key} cd", "ab \\123 cd"),
         ("ab \\{foo} cd", "ab \\{foo} cd"),
         ("ab \\\\{foo} cd", "ab \\\\{foo} cd"),
@@ -600,7 +602,7 @@ def test_illegal_character_in_interpolation() -> None:
         if backup is not None:
             os.environ["x.A"] = backup
 
-    with pytest.raises(InterpolationSyntaxError):
+    with pytest.raises(ValidationError):
         c.c
 
 
@@ -790,7 +792,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_top_trailing_escapes", "${prim_str}" + "\\" * 5, "hi" + "\\" * 3),
     ("str_top_concat_interpolations", "${true}${float}", "True1.1"),
     # Quoted strings (within interpolations).
-    ("str_no_other", "${identity:hi_${prim_str_space}}", InterpolationSyntaxError,),
+    ("str_no_other", "${identity:hi_${prim_str_space}}", "hi_hello world"),
     (
         "str_quoted_double",
         '${identity:"I say "${prim_str_space}}',
@@ -831,7 +833,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_quoted_too_many_3", "${identity:''a''}", InterpolationSyntaxError),
     # Unquoted strings (within interpolations).
     ("str_dollar", "${identity:$}", "$"),
-    ("str_dollar_inter", "${identity:$$${prim_str}}", InterpolationSyntaxError),
+    ("str_dollar_inter", "${identity:$$${prim_str}}", "$$hi"),
     ("str_backslash_noesc", r"${identity:ab\cd}", r"ab\cd"),
     ("str_esc_inter_1", r"${identity:\${foo\}}", InterpolationSyntaxError),
     ("str_esc_inter_2", r"${identity:\${}", InterpolationSyntaxError),
@@ -928,7 +930,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("ws_quoted_double", '${identity:  \t"foo"\t }', "foo"),
     # ##### Unusual / edge cases below #####
     # Unquoted `.` and/or `:` on the left of a string interpolation.
-    ("str_other_left", "${identity:.:${prim_str_space}}", InterpolationSyntaxError,),
+    ("str_other_left", "${identity:.:${prim_str_space}}", ".:hello world"),
     # Quoted interpolation (=> not actually an interpolation).
     ("fake_interpolation", "'${prim_str}'", "'hi'"),
     # Same as previous, but combined with a "real" interpolation.

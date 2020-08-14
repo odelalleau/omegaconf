@@ -250,10 +250,14 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
         return list(val for val, _ in self.visitSequence(sequence))  # ignore raw text
 
     def visitPrimitive(self, ctx: InterpolationParser.PrimitiveContext) -> Any:
-        # QUOTED_VALUE | (ID | NULL | INT | FLOAT | BOOL | OTHER_CHAR | COLON)+
+        # QUOTED_VALUE |
+        # (ID | NULL | INT | FLOAT | BOOL | OTHER_CHAR | COLON | interpolation)+
         if ctx.getChildCount() == 1:
-            assert isinstance(ctx.getChild(0), TerminalNode)
-            symbol = ctx.getChild(0).symbol
+            child = ctx.getChild(0)
+            if isinstance(child, InterpolationParser.InterpolationContext):
+                return self.visitInterpolation(child)
+            assert isinstance(child, TerminalNode)
+            symbol = child.symbol
             # Parse primitive types.
             if symbol.type == InterpolationLexer.QUOTED_VALUE:
                 return self._resolve_quoted_string(symbol.text)
@@ -272,9 +276,9 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
             elif symbol.type == InterpolationLexer.BOOL:
                 return symbol.text.lower() == "true"
             elif symbol.type == InterpolationLexer.ESC:
-                return self._unescape([ctx.getChild(0)])
+                return self._unescape([child])
             assert False, symbol.type
-        # Concatenation of symbols ==> un-escape the concatenation.
+        # Concatenation of multiple items ==> un-escape the concatenation.
         return self._unescape(ctx.getChildren())
 
     def visitSequence(
@@ -358,19 +362,30 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
         # Cast result to string.
         return str(quoted_val)
 
-    def _unescape(self, seq: Iterable[TerminalNode]) -> str:
+    def _unescape(
+        self,
+        seq: Iterable[Union[TerminalNode, InterpolationParser.InterpolationContext]],
+    ) -> str:
         """
-        Concatenate all symbols in `seq`, unescaping those that need it.
+        Concatenate all symbols / interpolations in `seq`, unescaping symbols as needed.
+
+        Interpolations are resolved and cast to string *WITHOUT* escaping their result
+        (it is assumed that whatever escaping is required was already handled during the
+        resolving of the interpolation).
         """
         chrs = []
         for node in seq:
-            s = node.symbol
-            if s.type == InterpolationLexer.ESC:
-                chrs.append(s.text[1::2])
-            elif s.type == InterpolationLexer.ESC_INTER:
-                chrs.append(s.text[1:])
+            if isinstance(node, TerminalNode):
+                s = node.symbol
+                if s.type == InterpolationLexer.ESC:
+                    chrs.append(s.text[1::2])
+                elif s.type == InterpolationLexer.ESC_INTER:
+                    chrs.append(s.text[1:])
+                else:
+                    chrs.append(s.text)
             else:
-                chrs.append(s.text)
+                assert isinstance(node, InterpolationParser.InterpolationContext)
+                chrs.append(str(self.visitInterpolation(node)))
         return "".join(chrs)
 
 

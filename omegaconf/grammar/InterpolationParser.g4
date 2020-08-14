@@ -46,7 +46,6 @@ element:
       primitive
     | listValue
     | dictValue
-    | interpolation
 ;
 
 primitive:
@@ -61,4 +60,5 @@ primitive:
         | COLON                                     // :
         | ESC                                       // \\, \, \ , \\t
         | WS                                        // whitespaces
+        | interpolation
     )+;
