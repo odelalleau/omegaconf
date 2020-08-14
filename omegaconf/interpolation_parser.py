@@ -251,7 +251,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
 
     def visitPrimitive(self, ctx: InterpolationParser.PrimitiveContext) -> Any:
         # QUOTED_VALUE |
-        # (ID | NULL | INT | FLOAT | BOOL | OTHER_CHAR | COLON | interpolation)+
+        # (ID | NULL | INT | FLOAT | BOOL | OTHER_CHAR | COLON | ESC | WS | interpolation)+
         if ctx.getChildCount() == 1:
             child = ctx.getChild(0)
             if isinstance(child, InterpolationParser.InterpolationContext):
@@ -277,6 +277,9 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
                 return symbol.text.lower() == "true"
             elif symbol.type == InterpolationLexer.ESC:
                 return self._unescape([child])
+            elif symbol.type == InterpolationLexer.WS:
+                # A single WS should have been "consumed" by another token.
+                raise AssertionError("WS should never be reached")
             assert False, symbol.type
         # Concatenation of multiple items ==> un-escape the concatenation.
         return self._unescape(ctx.getChildren())

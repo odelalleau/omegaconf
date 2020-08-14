@@ -716,8 +716,10 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("float_no_decimal", "${identity:1.}", 1.0),
     ("float_plus", "${identity:+1.01}", 1.01),
     ("float_minus", "${identity:-.2}", -0.2),
+    ("float_underscore", "${identity:1.1_1}", 1.11),
     ("float_bad_1", "${identity:1.+2}", "1.+2"),
     ("float_bad_2", r"${identity:1\.2}", r"1\.2"),
+    ("float_bad_3", "${identity:1.2_}", "1.2_"),
     ("float_exp_1", "${identity:-1e2}", -100.0),
     ("float_exp_2", "${identity:+1E-2}", 0.01),
     ("float_exp_3", "${identity:1_0e1_0}", 10e10),
@@ -834,6 +836,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     # Unquoted strings (within interpolations).
     ("str_dollar", "${identity:$}", "$"),
     ("str_dollar_inter", "${identity:$$${prim_str}}", "$$hi"),
+    ("str_colon", "${identity::}", ":"),
     ("str_backslash_noesc", r"${identity:ab\cd}", r"ab\cd"),
     ("str_esc_inter_1", r"${identity:\${foo\}}", InterpolationSyntaxError),
     ("str_esc_inter_2", r"${identity:\${}", InterpolationSyntaxError),

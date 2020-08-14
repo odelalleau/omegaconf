@@ -6,7 +6,7 @@ lexer grammar InterpolationLexer;
 
 // Re-used Fragments.
 fragment DIGIT: [0-9];
-fragment INT_UNSIGNED: ('0' | [1-9] (('_')? DIGIT)*);
+fragment INT_UNSIGNED: '0' | [1-9] (('_')? DIGIT)*;
 fragment CHAR: [a-zA-Z];
 fragment ID_: (CHAR|'_') (CHAR|DIGIT|'_')*;
 fragment INTERPOLATION_OPEN_: '${';
@@ -63,7 +63,7 @@ BOOL:
 // Numbers.
 INT: [+-]? INT_UNSIGNED;
 
-fragment POINT_FLOAT: INT_UNSIGNED? '.' DIGIT+ | INT_UNSIGNED '.';
+fragment POINT_FLOAT: INT_UNSIGNED? '.' DIGIT (('_')? DIGIT)* | INT_UNSIGNED '.';
 fragment EXPONENT_FLOAT: (INT_UNSIGNED | POINT_FLOAT) [eE] [+-]? INT_UNSIGNED;
 FLOAT: [+-]? (POINT_FLOAT | EXPONENT_FLOAT | [Ii][Nn][Ff] | [Nn][Aa][Nn]);
 
