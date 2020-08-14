@@ -274,7 +274,7 @@ Example:
 .. doctest::
 
     >>> conf = OmegaConf.load('source/config_interpolation.yaml')
-    >>> # Primitive interpolation types are inherited from the referenced value
+    >>> # Primitive interpolation types are inherited from the reference
     >>> print(conf.client.server_port)
     80
     >>> print(type(conf.client.server_port).__name__)
@@ -317,25 +317,42 @@ Input yaml file:
 .. doctest::
 
     >>> conf = OmegaConf.load('source/env_interpolation.yaml')
-    >>> print(conf.user.name)
-    omry
-    >>> print(conf.user.home)
-    /home/omry
+    >>> print(repr(conf.user.name))
+    'omry'
+    >>> print(repr(conf.user.home))
+    '/home/omry'
 
 You can specify a default value to use in case the environment variable is not defined.
-The following example sets `12345` as the the default value for the `DB_PASSWORD` environment variable.
+The following example sets `"12345"` as the the default value when `DB_PASSWORD` is not defined.
 
 .. doctest::
 
     >>> cfg = OmegaConf.create({
-    ...       'database': {'password': '${env:DB_PASSWORD,12345}'}
+    ...       'database': {'password': '${env:DB_PASSWORD,"12345"}'}
     ... })
-    >>> print(cfg.database.password)
-    12345
-    >>> OmegaConf.clear_cache(cfg) # clear resolver cache
+    >>> print(repr(cfg.database.password))
+    '12345'
     >>> os.environ["DB_PASSWORD"] = 'secret'
-    >>> print(cfg.database.password)
-    secret
+    >>> print(repr(cfg.database.password))
+    'secret'
+
+Environment variables are parsed when they are recognized as valid quantities that
+may be evaluated:
+
+.. doctest::
+
+    >>> cfg = OmegaConf.create({
+    ...       'database': {'password': '${env:DB_PASSWORD,"12345"}',
+    ...                    'user': 'someuser',
+    ...                    'port': '${env:DB_PORT,3306}'}
+    ... })
+    >>> os.environ["DB_PORT"] = '3308'
+    >>> print(repr(cfg.database.port))  # converted to int
+    3308
+    >>> os.environ["DB_PASSWORD"] = '${database.user}_password'
+    >>> print(repr(cfg.database.password))  # interpolation is resolved
+    'someuser_password'
+
 
 Custom interpolations
 ^^^^^^^^^^^^^^^^^^^^^
@@ -347,7 +364,8 @@ this is to preserve backward compatibility with the old behavior where resolver 
 
 .. doctest::
 
-    >>> OmegaConf.register_resolver("plus_10", lambda x: x + 10, variables_as_strings=False)
+    >>> OmegaConf.register_resolver("plus_10", lambda x: x + 10,
+    ...                             variables_as_strings=False)
     >>> c = OmegaConf.create({'key': '${plus_10:990}'})
     >>> c.key
     1000
@@ -355,7 +373,8 @@ this is to preserve backward compatibility with the old behavior where resolver 
 
 Custom resolvers support variadic argument lists in the form of a comma separated list of zero or more values.
 Whitespaces are stripped from both ends of each value ("foo,bar" is the same as "foo, bar ").
-You can use literal commas and spaces anywhere by escaping (:code:`\,` and :code:`\ `).
+You can use literal commas and spaces anywhere by escaping (:code:`\,` and :code:`\ `), or
+simply use quotes to bypass character limitations in strings.
 
 .. doctest::
 
@@ -364,6 +383,7 @@ You can use literal commas and spaces anywhere by escaping (:code:`\,` and :code
     ...     'key1': '${concat:Hello,World}',
     ...     'key_trimmed': '${concat:Hello , World}',
     ...     'escape_whitespace': '${concat:Hello,\ World}',
+    ...     'quoted': '${concat:"Hello,", " World"}',
     ... })
     >>> c.key1
     'HelloWorld'
@@ -371,6 +391,8 @@ You can use literal commas and spaces anywhere by escaping (:code:`\,` and :code
     'HelloWorld'
     >>> c.escape_whitespace
     'Hello\\World'
+    >>> c.quoted
+    'Hello, World'
 
 You can take advantage of nested interpolations to perform operations over variables:
 
