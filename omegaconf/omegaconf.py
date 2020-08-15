@@ -131,7 +131,7 @@ def register_default_resolvers() -> None:
 
     # Note that the `env` resolver does *NOT* use the cache.
     OmegaConf.register_resolver(
-        "env", env, config_arg="config", variables_as_strings=False, use_cache=False,
+        "env", env, config_arg="config", args_as_strings=False, use_cache=False,
     )
 
 
@@ -334,13 +334,13 @@ class OmegaConf:
     def register_resolver(
         name: str,
         resolver: Resolver,
-        variables_as_strings: bool = True,
+        args_as_strings: bool = True,
         config_arg: Optional[str] = None,
         parent_arg: Optional[str] = None,
         use_cache: Optional[bool] = None,
     ) -> None:
         """
-        The `variables_as_strings` flag was introduced to preserve backward compatibility
+        The `args_as_strings` flag was introduced to preserve backward compatibility
         with the older resolver system, which assumed that resolvers took the raw string
         representation of their inputs:
             - `True` is the old behavior (the resolver uses the string representation
@@ -394,15 +394,15 @@ class OmegaConf:
             key: Tuple[Any, ...],
             inputs_str: Tuple[str, ...],
         ) -> Any:
-            # The `variables_as_strings` warning is triggered when the resolver is
+            # The `args_as_strings` warning is triggered when the resolver is
             # called instead of when it is defined, so as to limit the amount of
             # warnings (by skipping warnings when all inputs are strings).
-            if variables_as_strings and any(not isinstance(k, str) for k in key):
+            if args_as_strings and any(not isinstance(k, str) for k in key):
                 warnings.warn(
                     f"Using resolvers that assume all inputs are given as strings is "
                     f"now deprecated. Please update resolver '{name}' to take "
                     f"non-string inputs and register it with "
-                    f"`variables_as_strings=False` (this will become the default "
+                    f"`args_as_strings=False` (this will become the default "
                     f"behavior in the future).",
                     category=UserWarning,
                 )

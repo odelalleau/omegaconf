@@ -257,7 +257,7 @@ def test_clear_resolvers(restore_resolvers: Any) -> None:
 
 
 def test_register_resolver_1(restore_resolvers: Any) -> None:
-    OmegaConf.register_resolver("plus_10", lambda x: x + 10, variables_as_strings=False)
+    OmegaConf.register_resolver("plus_10", lambda x: x + 10, args_as_strings=False)
     c = OmegaConf.create(dict(k="${plus_10:990}"))
 
     assert type(c.k) == int
@@ -374,7 +374,7 @@ def test_resolver_cache_3_dict_list(restore_resolvers: Any) -> None:
     Tests that the resolver cache works as expected with lists and dicts.
     """
     OmegaConf.register_resolver(
-        "random", lambda _: random.uniform(0, 1), variables_as_strings=False
+        "random", lambda _: random.uniform(0, 1), args_as_strings=False
     )
     c = OmegaConf.create(
         dict(
@@ -580,7 +580,7 @@ def test_nested_interpolations(
     restore_resolvers: Any, cfg: str, expected_dict: Dict[str, Any]
 ) -> None:
     os.environ["OMEGACONF_NESTED_INTERPOLATIONS_TEST"] = "test123"
-    OmegaConf.register_resolver("plus", lambda x, y: x + y, variables_as_strings=False)
+    OmegaConf.register_resolver("plus", lambda x, y: x + y, args_as_strings=False)
     c = OmegaConf.create(cfg)
     for key, expected in expected_dict.items():
         assert OmegaConf.select(c, key) == expected
@@ -1013,28 +1013,28 @@ def test_all_interpolations(restore_resolvers: Any, key: str, expected: Any) -> 
     OmegaConf.register_resolver(
         "identity",
         lambda *args: args[0] if len(args) == 1 else list(args),
-        variables_as_strings=False,
+        args_as_strings=False,
     )
     OmegaConf.register_resolver(
-        "0", lambda *args: ["0"] + list(args), variables_as_strings=False
+        "0", lambda *args: ["0"] + list(args), args_as_strings=False
     )
     OmegaConf.register_resolver(
-        "1.1", lambda *args: ["1.1"] + list(args), variables_as_strings=False
+        "1.1", lambda *args: ["1.1"] + list(args), args_as_strings=False
     )
     OmegaConf.register_resolver(
-        "1e1", lambda *args: ["1e1"] + list(args), variables_as_strings=False
+        "1e1", lambda *args: ["1e1"] + list(args), args_as_strings=False
     )
     OmegaConf.register_resolver(
-        "null", lambda *args: ["null"] + list(args), variables_as_strings=False
+        "null", lambda *args: ["null"] + list(args), args_as_strings=False
     )
     OmegaConf.register_resolver(
-        "FALSE", lambda *args: ["FALSE"] + list(args), variables_as_strings=False
+        "FALSE", lambda *args: ["FALSE"] + list(args), args_as_strings=False
     )
     OmegaConf.register_resolver(
-        "True", lambda *args: ["True"] + list(args), variables_as_strings=False
+        "True", lambda *args: ["True"] + list(args), args_as_strings=False
     )
     OmegaConf.register_resolver(
-        "infnannulltruefalse", lambda: "ok", variables_as_strings=False
+        "infnannulltruefalse", lambda: "ok", args_as_strings=False
     )
 
     cfg_dict = {}

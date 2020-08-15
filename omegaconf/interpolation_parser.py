@@ -295,7 +295,7 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
                 assert isinstance(child, InterpolationParser.ElementContext)
                 # Also preserve the original text representation of `child` so
                 # as to allow backward compatibility with old resolvers (registered
-                # with `variables_as_strings=True`). Note that we cannot just cast
+                # with `args_as_strings=True`). Note that we cannot just cast
                 # the value to string later as for instance `null` would become "None".
                 yield _get_value(self.visitElement(child)), child.getText()
             else:

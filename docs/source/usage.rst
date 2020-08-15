@@ -359,13 +359,13 @@ Custom interpolations
 
 You can add additional interpolation types using custom resolvers.
 This example creates a resolver that adds 10 to the given value
-(note the need to specify `variables_as_strings=False` when the resolver takes non-string inputs --
+(note the need to specify `args_as_strings=False` when the resolver takes non-string inputs --
 this is to preserve backward compatibility with the old behavior where resolver inputs were systematically cast to strings).
 
 .. doctest::
 
     >>> OmegaConf.register_resolver("plus_10", lambda x: x + 10,
-    ...                             variables_as_strings=False)
+    ...                             args_as_strings=False)
     >>> c = OmegaConf.create({'key': '${plus_10:990}'})
     >>> c.key
     1000
@@ -400,7 +400,7 @@ You can take advantage of nested interpolations to perform operations over varia
 
     >>> OmegaConf.register_resolver("plus_int",
     ...                             lambda x, y: x + y,
-    ...                             variables_as_strings=False)
+    ...                             args_as_strings=False)
     >>> c = OmegaConf.create({"a": 1,
     ...                       "b": 2,
     ...                       "a_plus_b": "${plus_int:${a},${b}}"})
@@ -415,7 +415,7 @@ inputs we always return the same value. This behavior may be disabled by setting
     >>> import random; random.seed(1234)
     >>> OmegaConf.register_resolver("randint",
     ...                             lambda a, b: random.randint(a, b),
-    ...                             variables_as_strings=False)
+    ...                             args_as_strings=False)
     >>> c = OmegaConf.create({"x": "${randint_nocache:0, 1000}"})
     >>> c.x
     989
@@ -424,7 +424,7 @@ inputs we always return the same value. This behavior may be disabled by setting
     >>> OmegaConf.register_resolver("randint_nocache",
     ...                             lambda a, b: random.randint(a, b),
     ...                             use_cache=False,
-    ...                             variables_as_strings=False)
+    ...                             args_as_strings=False)
     >>> random.seed(1234)
     >>> c = OmegaConf.create({"x": "${randint_nocache:0, 1000}"})
     >>> c.x
