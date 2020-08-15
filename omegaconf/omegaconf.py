@@ -8,6 +8,7 @@ import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from enum import Enum
+from functools import cmp_to_key
 from typing import (
     IO,
     Any,
@@ -863,8 +864,8 @@ def _make_hashable(key: Tuple[Any, ...]) -> Tuple[Any, ...]:
 
     This is achieved by turning into tuples the lists and dicts that may be
     stored within `key`.
-    Note that dicts are not sorted, so that two dicts ordered differently will
-    lead to different resulting hashable keys.
+    Note that dicts are sorted, so that two dicts ordered differently will
+    lead to the same resulting hashable key.
 
     :return: a hashable version of `key`.
     """
@@ -887,7 +888,17 @@ def _make_hashable(key: Tuple[Any, ...]) -> Tuple[Any, ...]:
         elif isinstance(item, tuple):
             hashable_item = _make_hashable(item)
         elif isinstance(item, dict):
-            hashable_item = _make_hashable(tuple((k, v) for k, v in item.items()))
+            # We sort the dictionary so that the order of keys does not matter.
+            # Note that since keys might be of different types (due to interpolations)
+            # and comparisons between different types are not always allowed, we use
+            # a custom `_safe_cmp()` function to order keys.
+            key_func = cmp_to_key(_safe_cmp)
+            hashable_item = _make_hashable(
+                tuple(
+                    (k, v)
+                    for k, v in sorted(item.items(), key=lambda kv: key_func(kv[0]),)
+                )
+            )
         else:
             raise NotImplementedError(f"type {type(item)} cannot be made hashable")
         if new_key is None:
@@ -896,3 +907,20 @@ def _make_hashable(key: Tuple[Any, ...]) -> Tuple[Any, ...]:
         new_key.append(hashable_item)
     assert new_key is not None  # otherwise why did the first check failed?
     return tuple(new_key)
+
+
+def _safe_cmp(x: Any, y: Any) -> int:
+    """
+    Compare two elements `x` and `y` in a "safe" way.
+
+    By default, this function uses regular comparison operators (== and <), but
+    if an exception is raised (due to not being able to compare x and y), the
+    name of the types of `x` and `y` are used instead.
+    """
+    try:
+        return 0 if x == y else -1 if x < y else 1
+    except Exception:
+        type_x, type_y = type(x).__name__, type(y).__name__
+        if type_x == type_y:
+            raise  # cannot compare two different objects of the same type :(
+        return -1 if type_x < type_y else 1

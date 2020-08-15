@@ -391,10 +391,10 @@ def test_resolver_cache_3_dict_list(restore_resolvers: Any) -> None:
     assert c.lst1 == c.lst2
     assert c.lst1 != c.lst3
     assert c.dct1 == c.dct1
-    assert c.dct1 != c.dct2
+    assert c.dct1 == c.dct2
     assert c.mixed1 == c.mixed1
     assert c.mixed2 == c.mixed2
-    assert c.mixed1 != c.mixed2
+    assert c.mixed1 == c.mixed2
 
 
 def test_resolver_no_cache(restore_resolvers: Any) -> None:
