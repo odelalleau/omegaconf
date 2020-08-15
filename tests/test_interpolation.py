@@ -842,6 +842,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
     ("str_dollar", "${identity:$}", "$"),
     ("str_dollar_inter", "${identity:$$${prim_str}}", "$$hi"),
     ("str_colon", "${identity::}", ":"),
+    ("str_ws", "${identity:a b\tc  \t\t  d}", "a b\tc  \t\t  d"),
     ("str_backslash_noesc", r"${identity:ab\cd}", r"ab\cd"),
     ("str_esc_inter_1", r"${identity:\${foo\}}", InterpolationSyntaxError),
     ("str_esc_inter_2", r"${identity:\${}", InterpolationSyntaxError),
