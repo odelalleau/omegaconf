@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterator, Optional, Tuple, Type, Union
 from ._utils import ValueKind, format_and_raise, get_value_kind
 from .errors import ConfigKeyError, MissingMandatoryValue, UnsupportedInterpolationType
 from .grammar.gen.InterpolationParser import InterpolationParser
-from .interpolation_parser import ResolveInterpolationVisitor
+from .interpolation_parser import InterpolationVisitor
 
 
 @dataclass
@@ -308,7 +308,7 @@ class Container(Node):
         value_str = value._value()
         assert isinstance(value_str, str), (type(value_str), value_str)
 
-        inter_visitor = ResolveInterpolationVisitor(
+        inter_visitor = InterpolationVisitor(
             container=self,
             resolve_args=dict(
                 key=key,

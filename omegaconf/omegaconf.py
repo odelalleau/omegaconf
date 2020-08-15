@@ -55,7 +55,7 @@ from .errors import (
     UnsupportedInterpolationType,
     ValidationError,
 )
-from .interpolation_parser import ResolveInterpolationVisitor, parse
+from .interpolation_parser import InterpolationVisitor, parse
 from .nodes import (
     AnyNode,
     BooleanNode,
@@ -118,7 +118,7 @@ def register_default_resolvers() -> None:
                 return val_str
 
         # Resolve the parse tree.
-        visitor = ResolveInterpolationVisitor(
+        visitor = InterpolationVisitor(
             container=config,
             resolve_args=dict(
                 key=None,

@@ -92,7 +92,7 @@ class OmegaConfErrorListener(ErrorListener):  # type: ignore
         raise InterpolationContextSensitivityError()
 
 
-class ResolveInterpolationVisitor(InterpolationParserVisitor):
+class InterpolationVisitor(InterpolationParserVisitor):
     def __init__(
         self,
         container: "Container",
