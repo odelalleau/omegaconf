@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import yaml
 
-from . import interpolation_visitor
+from . import interpolation_parser
 from .errors import (
     ConfigIndexError,
     ConfigTypeError,
@@ -357,7 +357,7 @@ def get_value_kind(
         return ret(ValueKind.VALUE)
 
     if return_parse_tree:
-        parse_tree = interpolation_visitor.parse(value)
+        parse_tree = interpolation_parser.parse(value)
 
     return ret(ValueKind.INTERPOLATION)
 
