@@ -55,7 +55,7 @@ from .errors import (
     UnsupportedInterpolationType,
     ValidationError,
 )
-from .interpolation_parser import InterpolationVisitor, parse
+from .interpolation_visitor import InterpolationVisitor, parse
 from .nodes import (
     AnyNode,
     BooleanNode,

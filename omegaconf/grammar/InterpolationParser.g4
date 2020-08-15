@@ -13,7 +13,7 @@
 //   mentioned above, copy the latest version of `TEST_CONFIG_DATA` to Hydra (see
 //   Hydra's test: `tests/test_overrides_parser.py::test_omegaconf_interpolations`).
      
-// - Keep up-to-date the comments in the visitor (in `interpolation_parser.py`)
+// - Keep up-to-date the comments in the visitor (in `interpolation_visitor.py`)
 //   that contain grammar excerpts (within each `visit...()` method).
 //
 // - Remember to update the documentation (including the tutorial notebook)
