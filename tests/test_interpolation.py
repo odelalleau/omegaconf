@@ -868,6 +868,7 @@ TEST_CONFIG_DATA: List[Tuple[str, Any, Any]] = [
         "${identity:{${prim_str}: 0, ${null}: 1, ${int}: 2}}",
         {"hi": 0, None: 1, 123: 2},
     ),
+    ("dict_nan_as_key", "${identity:{${identity:nan}: 0}}", InterpolationTypeError),
     ("empties", "${identity:[],{}}", [[], {}]),
     (
         "structured_mixed",

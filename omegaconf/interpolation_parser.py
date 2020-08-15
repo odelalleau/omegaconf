@@ -1,3 +1,4 @@
+import math
 import sys
 from typing import (
     TYPE_CHECKING,
@@ -237,6 +238,10 @@ class ResolveInterpolationVisitor(InterpolationParserVisitor):
         else:
             assert isinstance(key_node, InterpolationParser.InterpolationContext)
             key = _get_value(self.visitInterpolation(key_node))
+            # Forbid using `nan` as dictionary key. This can screw up things due to
+            # `nan` not being equal to `nan` (ex: when attempting to sort keys).
+            if isinstance(key, float) and math.isnan(key):
+                raise InterpolationTypeError("cannot use `NaN` as dictionary key")
         value = _get_value(self.visitElement(ctx.getChild(2)))
         return key, value
 
