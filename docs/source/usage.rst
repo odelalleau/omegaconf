@@ -275,16 +275,16 @@ Example:
 
     >>> conf = OmegaConf.load('source/config_interpolation.yaml')
     >>> # Primitive interpolation types are inherited from the reference
-    >>> print(conf.client.server_port)
+    >>> conf.client.server_port
     80
-    >>> print(type(conf.client.server_port).__name__)
-    int
+    >>> type(conf.client.server_port).__name__
+    'int'
 
     >>> # Composite interpolation types are always string
-    >>> print(conf.client.url)
-    http://localhost:80/
-    >>> print(type(conf.client.url).__name__)
-    str
+    >>> conf.client.url
+    'http://localhost:80/'
+    >>> type(conf.client.url).__name__
+    'str'
 
 Interpolations may be nested, enabling more advanced behavior like dynamically selecting a sub-config:
 
@@ -297,11 +297,11 @@ Interpolations may be nested, enabling more advanced behavior like dynamically s
     ... selected_plan: A
     ... plan: ${plans.${selected_plan}}
     ... """)
-    >>> print(cfg.plan) # default plan
-    plan A
+    >>> cfg.plan # default plan
+    'plan A'
     >>> cfg.selected_plan = "B"
-    >>> print(cfg.plan) # new plan
-    plan B
+    >>> cfg.plan # new plan
+    'plan B'
 
 
 Environment variable interpolation
@@ -317,9 +317,9 @@ Input yaml file:
 .. doctest::
 
     >>> conf = OmegaConf.load('source/env_interpolation.yaml')
-    >>> print(repr(conf.user.name))
+    >>> conf.user.name
     'omry'
-    >>> print(repr(conf.user.home))
+    >>> conf.user.home
     '/home/omry'
 
 You can specify a default value to use in case the environment variable is not defined.
@@ -330,10 +330,10 @@ The following example sets `"12345"` as the the default value when `DB_PASSWORD`
     >>> cfg = OmegaConf.create({
     ...       'database': {'password': '${env:DB_PASSWORD,"12345"}'}
     ... })
-    >>> print(repr(cfg.database.password))
+    >>> cfg.database.password
     '12345'
     >>> os.environ["DB_PASSWORD"] = 'secret'
-    >>> print(repr(cfg.database.password))
+    >>> cfg.database.password
     'secret'
 
 Environment variables are parsed when they are recognized as valid quantities that
@@ -347,10 +347,10 @@ may be evaluated:
     ...                    'port': '${env:DB_PORT,3306}'}
     ... })
     >>> os.environ["DB_PORT"] = '3308'
-    >>> print(repr(cfg.database.port))  # converted to int
+    >>> cfg.database.port  # converted to int
     3308
     >>> os.environ["DB_PASSWORD"] = '${database.user}_password'
-    >>> print(repr(cfg.database.password))  # interpolation is resolved
+    >>> cfg.database.password  # interpolation is resolved
     'someuser_password'
 
 
@@ -359,8 +359,9 @@ Custom interpolations
 
 You can add additional interpolation types using custom resolvers.
 This example creates a resolver that adds 10 to the given value
-(note the need to specify `args_as_strings=False` when the resolver takes non-string inputs --
-this is to preserve backward compatibility with the old behavior where resolver inputs were systematically cast to strings).
+(note the need to specify `args_as_strings=False` when the resolver takes non-string arguments --
+this is to preserve backward compatibility with the old behavior where resolver arguments were always given
+as strings).
 
 .. doctest::
 
@@ -394,7 +395,7 @@ simply use quotes to bypass character limitations in strings.
     >>> c.quoted
     'Hello, World'
 
-You can take advantage of nested interpolations to perform operations over variables:
+You can take advantage of nested interpolations to perform custom operations over variables:
 
 .. doctest::
 
@@ -416,16 +417,16 @@ inputs we always return the same value. This behavior may be disabled by setting
     >>> OmegaConf.register_resolver("randint",
     ...                             lambda a, b: random.randint(a, b),
     ...                             args_as_strings=False)
-    >>> c = OmegaConf.create({"x": "${randint_nocache:0, 1000}"})
+    >>> c = OmegaConf.create({"x": "${randint:0, 1000}"})
     >>> c.x
     989
     >>> c.x  # same as above thanks to the cache
     989
+    >>> random.seed(1234)
     >>> OmegaConf.register_resolver("randint_nocache",
     ...                             lambda a, b: random.randint(a, b),
     ...                             use_cache=False,
     ...                             args_as_strings=False)
-    >>> random.seed(1234)
     >>> c = OmegaConf.create({"x": "${randint_nocache:0, 1000}"})
     >>> c.x
     989
@@ -433,9 +434,10 @@ inputs we always return the same value. This behavior may be disabled by setting
     796
 
 For more advanced operations on the config, you can allow a resolver to access the config
-object by declaring a `config_arg`
-(note that you cannot use the cache in this case, since the resolver's output may now
-depend on arbitrary parts of the config).
+object by setting `config_arg` -- preferably pointing to a keyword-only argument of
+the resolver.
+Note that you cannot use the cache in this case, since the resolver's output may now
+depend on arbitrary components of the config.
 
 .. doctest::
 
@@ -446,9 +448,9 @@ depend on arbitrary parts of the config).
     >>> c = OmegaConf.create({"a": 1,
     ...                       "can_process_a": "${key_exists:a}",
     ...                       "can_process_b": "${key_exists:b}"})
-    >>> print(repr(c.can_process_a))
+    >>> c.can_process_a
     True
-    >>> print(repr(c.can_process_b))
+    >>> c.can_process_b
     False
 
 A similar mechanism can be used to access the parent of the current key being processed,
