@@ -1,6 +1,7 @@
 import codecs
 import distutils.log
 import errno
+import os
 import re
 import shutil
 import subprocess
@@ -137,12 +138,12 @@ def find(
         scan_exclude = []
     files = []
     scan_root = root / rbase
-    for path in scan_root.iterdir():
-        path = rbase / path.name
+    for entry in scan_root.iterdir():
+        path = rbase / entry.name
         if matches(scan_exclude, path):
             continue
 
-        if path.is_dir():
+        if entry.is_dir():
             if matches(include_dirs, path):
                 if not matches(excludes, path):
                     files.append(path)
@@ -174,7 +175,7 @@ def find_version(*file_paths: List[str]) -> str:
 
 
 def matches(patterns: List[str], path: Path) -> bool:
-    string = str(path).replace("\\", "/")
+    string = str(path).replace(os.sep, "/")  # for Windows
     for pattern in patterns:
         if re.match(pattern, string):
             return True
