@@ -63,7 +63,7 @@ def test_select(
         keys = [keys]
     if not isinstance(expected, (tuple, list)):
         expected = [expected]
-    OmegaConf.register_resolver("foo", lambda x: f"_{x}_")
+    OmegaConf.register_resolver("foo", lambda x: f"_{x}_", args_as_strings=False)
 
     c = OmegaConf.create(cfg)
     with expectation:
