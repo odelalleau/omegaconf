@@ -342,21 +342,64 @@ class OmegaConf:
         return [re.sub(r"(\\([ ,]))", lambda x: x.group(2), x) for x in escaped]
 
     @staticmethod
-    def register_resolver(name: str, resolver: Resolver) -> None:
+    def register_resolver(
+        name: str,
+        resolver: Resolver,
+        args_as_strings: bool = True,
+        use_cache: Optional[bool] = True,
+    ) -> None:
+        """
+        The `args_as_strings` flag was introduced to preserve backward compatibility
+        with the older resolver system, which assumed that resolvers took the raw string
+        representation of their inputs:
+            - `True` is the old behavior (the resolver uses the string representation
+              of its inputs), and triggers a warning
+            - `False` is the new behavior (the resolver can take non-string inputs), and
+              will become the default in the future
+        """
         assert callable(resolver), "resolver must be callable"
         # noinspection PyProtectedMember
         assert (
             name not in BaseContainer._resolvers
         ), "resolved {} is already registered".format(name)
+        def caching(
+            config: BaseContainer,
+            parent: Optional[Container],
+            key: Tuple[Any, ...],
+            inputs_str: Tuple[str, ...],
+        ) -> Any:
+            # The `args_as_strings` warning is triggered when the resolver is
+            # called instead of when it is defined, so as to limit the amount of
+            # warnings (by skipping warnings when all inputs are strings).
+            if args_as_strings and any(not isinstance(k, str) for k in key):
+                warnings.warn(
+                    f"Resolver '{name}' was registered with `args_as_strings=True` "
+                    f"(current default value) and was given at least one "
+                    f"non-string argument. For now we preserve the original string "
+                    f"representation of such arguments, but this behavior is "
+                    f"deprecated. Please register '{name}' with "
+                    f"`args_as_strings=False`, ensuring that it does not assume "
+                    f"string-only inputs anymore. This will become the default "
+                    f"behavior in the future.",
+                    category=UserWarning,
+                )
+                inputs = inputs_str
+            else:
+                inputs = key
 
-        def caching(config: BaseContainer, key: str) -> Any:
-            cache = OmegaConf.get_cache(config)[name]
-            val = (
-                cache[key] if key in cache else resolver(*OmegaConf._tokenize_args(key))
-            )
-            cache[key] = val
-            return val
+            if use_cache:
+                cache = OmegaConf.get_cache(config)[name]
+                hashable_key = _make_hashable(key)
+                try:
+                    return cache[hashable_key]
+                except KeyError:
+                    pass
 
+            # Call resolver.
+            ret = resolver(*inputs)
+            if use_cache:
+                cache[hashable_key] = ret
+            return ret
         # noinspection PyProtectedMember
         BaseContainer._resolvers[name] = caching
 
@@ -812,3 +855,75 @@ def _select_one(
         assert False
 
     return val, ret_key
+
+
+def _make_hashable(key: Tuple[Any, ...]) -> Tuple[Any, ...]:
+    """
+    Ensure `key` is hashable.
+
+    This is achieved by turning into tuples the lists and dicts that may be
+    stored within `key`.
+    Note that dicts are sorted, so that two dicts ordered differently will
+    lead to the same resulting hashable key.
+
+    :return: a hashable version of `key`.
+    """
+    # Hopefully it is already hashable and we have nothing to do!
+    try:
+        hash(key)
+    except TypeError:
+        pass
+    else:
+        return key
+
+    new_key: Optional[List[Any]] = None  # will store the new key
+    for idx, item in enumerate(key):
+        if item is None or isinstance(item, (int, float, bool, str)):
+            if new_key is not None:
+                new_key.append(item)
+            continue
+        if isinstance(item, list):
+            hashable_item = _make_hashable(tuple(item))
+        elif isinstance(item, tuple):
+            hashable_item = _make_hashable(item)
+        elif isinstance(item, dict):
+            # We sort the dictionary so that the order of keys does not matter.
+            # Note that since keys might be of different types (due to interpolations)
+            # and comparisons between different types are not always allowed, we use
+            # a custom `_safe_cmp()` function to order keys.
+            key_func = cmp_to_key(_safe_cmp)
+            hashable_item = _make_hashable(
+                tuple(
+                    (k, v)
+                    for k, v in sorted(
+                        item.items(),
+                        key=lambda kv: key_func(kv[0]),
+                    )
+                )
+            )
+        else:
+            raise NotImplementedError(f"type {type(item)} cannot be made hashable")
+        if new_key is None:
+            # Initialize `new_key` from the first elements of `key` that we skipped over.
+            new_key = list(key[0:idx])
+        new_key.append(hashable_item)
+    assert new_key is not None  # otherwise the very first check should have succeeded
+    return tuple(new_key)
+
+
+def _safe_cmp(x: Any, y: Any) -> int:
+    """
+    Compare two elements `x` and `y` in a "safe" way.
+
+    By default, this function uses regular comparison operators (== and <), but
+    if an exception is raised (due to not being able to compare x and y), the
+    name of the types of `x` and `y` are used instead.
+    """
+    try:
+        return 0 if x == y else -1 if x < y else 1
+    except Exception:
+        type_x, type_y = type(x).__name__, type(y).__name__
+        if type_x == type_y:
+            # cannot compare two different objects of the same type!?
+            raise  # pragma: no cover
+        return -1 if type_x < type_y else 1
