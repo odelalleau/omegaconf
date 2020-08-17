@@ -26,6 +26,10 @@ from omegaconf.errors import (
 )
 
 
+# file deepcode ignore CopyPasteError: there are several tests of the form `c.k == c.k`
+# (this is intended to trigger multiple accesses to the same config key)
+
+
 @pytest.mark.parametrize(  # type:ignore
     "cfg,key,expected",
     [
