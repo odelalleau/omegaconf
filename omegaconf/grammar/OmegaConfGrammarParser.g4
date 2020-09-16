@@ -1,49 +1,43 @@
-// Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-
 // Regenerate parser by running 'python setup.py antlr' at project root.
-// If you make changes here be sure to update the documentation
-// (and update the grammar in website/docs/advanced/override_grammar/*.md)
-parser grammar OverrideParser;
-options {tokenVocab = OverrideLexer;}
 
-// High-level command-line override.
+// Maintenance guidelines when modifying this grammar:
+//
+// - For initial testing of the parsing abilities of the modified grammer before
+//   writing all the support visitor code, change the test
+//        `tests/test_interpolation.py::test_all_interpolations`
+//   by setting `dbg_test_access_only = True`, and run it. You will also probably
+//   need to comment / hijack the code accesssing the visitor. Tests that expect
+//   errors raised from the visitor will obviously fail.
+//
+// - Update Hydra's grammar accordingly, and if you added more cases to the test
+//   mentioned above, copy the latest version of `TEST_CONFIG_DATA` to Hydra (see
+//   Hydra's test: `tests/test_overrides_parser.py::test_omegaconf_interpolations`).
 
-override: (
-      key EQUAL value?                           // key=value, key= (for empty value)
-    | TILDE key (EQUAL value?)?                  // ~key | ~key=value
-    | PLUS key EQUAL value?                      // +key= | +key=value
-) EOF;
+// - Keep up-to-date the comments in the visitor (in `grammar_visitor.py`)
+//   that contain grammar excerpts (within each `visit...()` method).
+//
+// - Remember to update the documentation (including the tutorial notebook)
 
-// Keys.
+parser grammar OmegaConfGrammarParser;
+options {tokenVocab = OmegaConfGrammarLexer;}
 
-key :
-    packageOrGroup                               // key
-    | packageOrGroup AT package (COLON package)? // group@pkg | group@pkg1:pkg2
-    | packageOrGroup ATCOLON package             // group@:pkg2
-;
+// Main rules used to parse OmegaConf strings.
 
-packageOrGroup: package | ID (SLASH ID)+;        // db, hydra/launcher
-package: (ID | DOT_PATH);                        // db, hydra.launcher
+configValue: toplevel EOF;
+singleElement: element EOF;
 
-// Elements (that may be swept over).
+// Top-level: strings (that need not be parsed), potentially mixed with interpolations.
 
-value: element | simpleChoiceSweep;
+toplevel: toplevelStr | (toplevelStr? (interpolation toplevelStr?)+);
+toplevelStr: (ESC | ESC_INTER | TOP_CHAR | TOP_STR)+;
+
+// Elements.
 
 element:
       primitive
     | listValue
     | dictValue
-    | function
 ;
-
-simpleChoiceSweep:
-      element (COMMA element)+                   // value1,value2,value3
-;
-
-// Functions.
-
-argName: ID EQUAL;
-function: ID POPEN (argName? element (COMMA argName? element )* )? PCLOSE;
 
 // Data structures.
 
