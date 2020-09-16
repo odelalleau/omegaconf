@@ -1,8 +1,10 @@
-// Regenerate lexer and parser by running 'python setup.py antlr' at project root.
-// See `InterpolationParser.g4` for some important information regarding how to
-// properly maintain this grammar.
+// Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
-lexer grammar OmegaConfGrammarLexer;
+// Regenerate lexer by running 'python setup.py antlr' at project root.
+// If you make changes here be sure to update the documentation
+// (and update the grammar in website/docs/advanced/override_grammar/*.md)
+lexer grammar OverrideLexer;
+
 
 // Re-usable fragments.
 fragment CHAR: [a-zA-Z];
@@ -10,19 +12,21 @@ fragment DIGIT: [0-9];
 fragment INT_UNSIGNED: '0' | [1-9] (('_')? DIGIT)*;
 fragment ESC_BACKSLASH: '\\\\';  // escaped backslash
 
-/////////////////////////////
-// DEFAULT_MODE (TOPLEVEL) //
-/////////////////////////////
+////////////////////////
+// DEFAULT_MODE (KEY) //
+////////////////////////
 
-TOP_INTER_OPEN: INTER_OPEN -> type(INTER_OPEN), pushMode(INTERPOLATION_MODE);
+EQUAL: '=' WS? -> mode(VALUE_MODE);
 
-ESC_INTER: '\\${';
-TOP_ESC: ESC_BACKSLASH+ -> type(ESC);
+TILDE: '~';
+PLUS: '+';
+AT: '@';
+COLON: ':';
+ATCOLON: '@:';
+SLASH: '/';
 
-// The backslash and dollar characters must not be grouped with others, so that
-// we can properly detect the tokens above.
-TOP_CHAR: [\\$];
-TOP_STR: ~[\\$]+;  // anything else
+KEY_ID: ID -> type(ID);
+DOT_PATH: (ID | INT_UNSIGNED) ('.' (ID | INT_UNSIGNED))+;
 
 ////////////////
 // VALUE_MODE //
@@ -34,10 +38,13 @@ INTER_OPEN: '${' -> pushMode(INTERPOLATION_MODE);
 BRACE_OPEN: '{' WS? -> pushMode(VALUE_MODE);  // must keep track of braces to detect end of interpolation
 BRACE_CLOSE: WS? '}' -> popMode;
 
+POPEN: WS? '(' WS?;  // whitespaces before to allow `func (x)`
 COMMA: WS? ',' WS?;
+PCLOSE: WS? ')';
 BRACKET_OPEN: '[' WS?;
 BRACKET_CLOSE: WS? ']';
-COLON: WS? ':' WS?;
+VALUE_COLON: WS? ':' WS? -> type(COLON);
+VALUE_EQUAL: WS? '=' WS? -> type(EQUAL);
 
 // Numbers.
 
