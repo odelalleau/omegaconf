@@ -513,8 +513,15 @@ class BaseContainer(Container, ABC):
                     do_deepcopy = True
 
             if do_deepcopy:
-                value = copy.deepcopy(value)
-            value._set_parent(None)
+                val_dict = value.__dict__
+                val_parent = val_dict["_parent"]
+                val_dict["_parent"] = None
+                try:
+                    value = copy.deepcopy(value)
+                finally:
+                    val_dict["_parent"] = val_parent
+            else:
+                value._set_parent(None)
 
             try:
                 old = value._key()
