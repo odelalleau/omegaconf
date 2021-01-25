@@ -109,34 +109,6 @@ class DictConfig(BaseContainer, MutableMapping[Any, Any]):
         except Exception as ex:
             format_and_raise(node=None, key=None, value=None, cause=ex, msg=str(ex))
 
-    def __deepcopy__(self, memo: Dict[int, Any]) -> "DictConfig":
-        res = DictConfig(None)
-        res.__dict__["_metadata"] = copy.deepcopy(self.__dict__["_metadata"], memo=memo)
-        res.__dict__["_flags_cache"] = copy.deepcopy(
-            self.__dict__["_flags_cache"], memo=memo
-        )
-
-        src_content = self.__dict__["_content"]
-        if isinstance(src_content, dict):
-            content_copy = {}
-            for k, v in src_content.items():
-                old_parent = v.__dict__["_parent"]
-                try:
-                    v.__dict__["_parent"] = None
-                    vc = copy.deepcopy(v, memo=memo)
-                    vc.__dict__["_parent"] = res
-                    content_copy[k] = vc
-                finally:
-                    v.__dict__["_parent"] = old_parent
-        else:
-            # None and strings can be assigned as is
-            content_copy = src_content
-
-        res.__dict__["_content"] = content_copy
-        # parent is retained, but not copied
-        res.__dict__["_parent"] = self.__dict__["_parent"]
-        return res
-
     def copy(self) -> "DictConfig":
         return copy.copy(self)
 
@@ -347,7 +319,7 @@ class DictConfig(BaseContainer, MutableMapping[Any, Any]):
         :param key:
         :return:
         """
-        if key == "__name__":
+        if key in ["__deepcopy__", "__name__"]:
             raise AttributeError()
 
         try:

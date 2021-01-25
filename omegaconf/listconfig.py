@@ -115,34 +115,6 @@ class ListConfig(BaseContainer, MutableSequence[Any]):
                 )
                 raise ValidationError(msg)
 
-    def __deepcopy__(self, memo: Dict[int, Any]) -> "ListConfig":
-        res = ListConfig(None)
-        res.__dict__["_metadata"] = copy.deepcopy(self.__dict__["_metadata"], memo=memo)
-        res.__dict__["_flags_cache"] = copy.deepcopy(
-            self.__dict__["_flags_cache"], memo=memo
-        )
-
-        src_content = self.__dict__["_content"]
-        if isinstance(src_content, list):
-            content_copy: List[Optional[Node]] = []
-            for v in src_content:
-                old_parent = v.__dict__["_parent"]
-                try:
-                    v.__dict__["_parent"] = None
-                    vc = copy.deepcopy(v, memo=memo)
-                    vc.__dict__["_parent"] = res
-                    content_copy.append(vc)
-                finally:
-                    v.__dict__["_parent"] = old_parent
-        else:
-            # None and strings can be assigned as is
-            content_copy = src_content
-
-        res.__dict__["_content"] = content_copy
-        res.__dict__["_parent"] = self.__dict__["_parent"]
-
-        return res
-
     def copy(self) -> "ListConfig":
         return copy.copy(self)
 
@@ -170,10 +142,7 @@ class ListConfig(BaseContainer, MutableSequence[Any]):
 
     def __getattr__(self, key: str) -> Any:
         # PyCharm is sometimes inspecting __members__, be sure to tell it we don't have that.
-        if key == "__members__":
-            raise AttributeError()
-
-        if key == "__name__":
+        if key in ["__deepcopy__", "__members__", "__name__"]:
             raise AttributeError()
 
         if is_int(key):

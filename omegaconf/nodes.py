@@ -162,11 +162,6 @@ class AnyNode(ValueNode):
             )
         return value
 
-    def __deepcopy__(self, memo: Dict[int, Any]) -> "AnyNode":
-        res = AnyNode()
-        self._deepcopy_impl(res, memo)
-        return res
-
 
 class StringNode(ValueNode):
     def __init__(
@@ -190,11 +185,6 @@ class StringNode(ValueNode):
         if OmegaConf.is_config(value) or is_primitive_container(value):
             raise ValidationError("Cannot convert '$VALUE_TYPE' to string : '$VALUE'")
         return str(value) if value is not None else None
-
-    def __deepcopy__(self, memo: Dict[int, Any]) -> "StringNode":
-        res = StringNode()
-        self._deepcopy_impl(res, memo)
-        return res
 
 
 class IntegerNode(ValueNode):
@@ -224,11 +214,6 @@ class IntegerNode(ValueNode):
         except ValueError:
             raise ValidationError("Value '$VALUE' could not be converted to Integer")
         return val
-
-    def __deepcopy__(self, memo: Dict[int, Any]) -> "IntegerNode":
-        res = IntegerNode()
-        self._deepcopy_impl(res, memo)
-        return res
 
 
 class FloatNode(ValueNode):
@@ -276,11 +261,6 @@ class FloatNode(ValueNode):
     def __hash__(self) -> int:
         return hash(self._val)
 
-    def __deepcopy__(self, memo: Dict[int, Any]) -> "FloatNode":
-        res = FloatNode()
-        self._deepcopy_impl(res, memo)
-        return res
-
 
 class BooleanNode(ValueNode):
     def __init__(
@@ -321,11 +301,6 @@ class BooleanNode(ValueNode):
             raise ValidationError(
                 "Value '$VALUE' is not a valid bool (type $VALUE_TYPE)"
             )
-
-    def __deepcopy__(self, memo: Dict[int, Any]) -> "BooleanNode":
-        res = BooleanNode()
-        self._deepcopy_impl(res, memo)
-        return res
 
 
 class EnumNode(ValueNode):  # lgtm [py/missing-equals] : Intentional.
@@ -398,8 +373,3 @@ class EnumNode(ValueNode):  # lgtm [py/missing-equals] : Intentional.
             raise ValidationError(
                 f"Invalid value '$VALUE', expected one of [{valid}]"
             ).with_traceback(sys.exc_info()[2]) from e
-
-    def __deepcopy__(self, memo: Dict[int, Any]) -> "EnumNode":
-        res = EnumNode(enum_type=self.enum_type)
-        self._deepcopy_impl(res, memo)
-        return res

@@ -458,7 +458,8 @@ def test_deepcopy(obj: Any) -> None:
     assert id(cp) != id(obj)
     assert obj.__dict__.keys() == cp.__dict__.keys()
     for k in obj.__dict__.keys():
-        assert obj.__dict__[k] == cp.__dict__[k]
+        if k != "_flags_cache":  # cache is lost on deepcopy
+            assert obj.__dict__[k] == cp.__dict__[k]
 
 
 @pytest.mark.parametrize(

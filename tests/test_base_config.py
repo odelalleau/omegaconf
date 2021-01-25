@@ -199,7 +199,8 @@ class TestDeepCopy:
 
         assert c1.__dict__.keys() == c2.__dict__.keys()
         for k in c1.__dict__.keys():
-            assert c1.__dict__[k] == c2.__dict__[k]
+            if k != "_flags_cache":  # cache is lost on deepcopy
+                assert c1.__dict__[k] == c2.__dict__[k]
 
         assert id(c1) != id(c2)
 
