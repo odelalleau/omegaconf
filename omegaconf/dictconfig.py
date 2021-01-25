@@ -109,6 +109,21 @@ class DictConfig(BaseContainer, MutableMapping[Any, Any]):
         except Exception as ex:
             format_and_raise(node=None, key=None, value=None, cause=ex, msg=str(ex))
 
+    def __copy__(self) -> "DictConfig":
+        res = DictConfig(content=None)
+        res.__dict__.update(self.__dict__)
+        content = res.__dict__["_content"]
+        if isinstance(content, dict):
+            # Real shallow copy is impossible because of the reference to the
+            # parent in child nodes: we need to copy them.
+            content_copy = {}
+            for key, node in content.items():
+                nc = content_copy[key] = copy.copy(node)
+                nc._set_parent(res)
+            res.__dict__["_content"] = content_copy
+
+        return res
+
     def copy(self) -> "DictConfig":
         return copy.copy(self)
 

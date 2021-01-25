@@ -115,6 +115,22 @@ class ListConfig(BaseContainer, MutableSequence[Any]):
                 )
                 raise ValidationError(msg)
 
+    def __copy__(self) -> "ListConfig":
+        res = ListConfig(content=None)
+        res.__dict__.update(self.__dict__)
+        content = res.__dict__["_content"]
+        if isinstance(content, list):
+            # Real shallow copy is impossible because of the reference to the
+            # parent in child nodes: we need to copy them.
+            content_copy = []
+            for item in content:
+                nc = copy.copy(item)
+                nc._set_parent(res)
+                content_copy.append(nc)
+            res.__dict__["_content"] = content_copy
+
+        return res
+
     def copy(self) -> "ListConfig":
         return copy.copy(self)
 
