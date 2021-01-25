@@ -470,23 +470,31 @@ class TestCopy:
         assert cfg[0] is not cp[0]
 
 
-@pytest.mark.parametrize("copy_func", [copy.copy, copy.deepcopy])
+@pytest.mark.parametrize(
+    ["copy_func", "expect_same_parent"], [(copy.copy, True), (copy.deepcopy, False)]
+)
 class TestParentAfterCopy:
-    def test_dict_copy(self, copy_func: Any) -> None:
+    def test_dict_copy(self, copy_func: Any, expect_same_parent: bool) -> None:
         cfg = OmegaConf.create({"a": {"b": 10}})
         nc = copy_func(cfg._get_node("a"))
-        assert nc._get_parent() is not cfg
+        nc_parent = nc._get_parent()
+        assert nc_parent is not None
+        assert (nc_parent is cfg) == expect_same_parent
         assert nc._get_node("b")._get_parent() is nc
 
-    def test_node_copy(self, copy_func: Any) -> None:
+    def test_node_copy(self, copy_func: Any, expect_same_parent: bool) -> None:
         cfg = OmegaConf.create({"a": {"b": 10}})
         nc = copy_func(cfg.a._get_node("b"))
-        assert (nc._get_parent() is cfg.a) == (copy_func is copy.copy)
+        nc_parent = nc._get_parent()
+        assert nc_parent is not None
+        assert (nc_parent is cfg.a) == expect_same_parent
 
-    def test_list_copy(self, copy_func: Any) -> None:
+    def test_list_copy(self, copy_func: Any, expect_same_parent: bool) -> None:
         cfg = OmegaConf.create({"a": [10]})
         nc = copy_func(cfg._get_node("a"))
-        assert nc._get_parent() is not cfg
+        nc_parent = nc._get_parent()
+        assert nc_parent is not None
+        assert (nc_parent is cfg) == expect_same_parent
         assert nc._get_node(0)._get_parent() is nc
 
 
