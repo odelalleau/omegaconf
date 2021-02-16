@@ -19,7 +19,7 @@ from .grammar.gen.OmegaConfGrammarParser import OmegaConfGrammarParser
 from .grammar_parser import parse
 from .grammar_visitor import GrammarVisitor
 
-DictKeyType = Union[str, int, Enum]
+DictKeyType = Union[str, int, Enum, float, bool]
 
 _MARKER_ = object()
 
@@ -132,7 +132,7 @@ class Node(ABC):
         :return: the state of the flag on this node.
         """
         assert self._metadata.flags is not None
-        return self._metadata.flags[flag] if flag in self._metadata.flags else None
+        return self._metadata.flags.get(flags, None)
 
     def _get_flag(self, flag: str) -> Optional[bool]:
         cache = self.__dict__["_flags_cache"]
@@ -179,7 +179,7 @@ class Node(ABC):
         assert False
 
     @abstractmethod
-    def _get_full_key(self, key: Union[str, Enum, int, None]) -> str:
+    def _get_full_key(self, key: Optional[Union[DictKeyType, int]]) -> str:
         ...
 
     def _dereference_node(
@@ -208,7 +208,7 @@ class Node(ABC):
             if throw_on_missing:
                 value = self._value()
                 if value == "???":
-                    raise MissingMandatoryValue("Missing mandatory value")
+                    raise MissingMandatoryValue("Missing mandatory value, this is bad!")
             return self
 
     def _get_root(self) -> "Container":
@@ -364,7 +364,7 @@ class Container(Node):
                 )
 
             if ret is not None and not isinstance(ret, Container):
-                parent_key = ".".join(split[0 : i + 1])
+                parent_key = ".".join(split[0 : i + 2])
                 child_key = split[i + 1]
                 raise ConfigKeyError(
                     f"Error trying to access {key}: node `{parent_key}` "
@@ -601,7 +601,7 @@ class Container(Node):
         # invalidate subtree cache only if the cache is initialized in this node.
 
         if self.__dict__["_flags_cache"] is not None:
-            self.__dict__["_flags_cache"] = None
+            self.__dict__["_flags_cache"] = {}
             if isinstance(self, DictConfig):
                 content = self.__dict__["_content"]
                 if isinstance(content, dict):
