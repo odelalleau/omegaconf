@@ -7,9 +7,11 @@ from typing import Any, Mapping, Optional, Union
 from ._utils import _DEFAULT_MARKER_, _get_value, decode_primitive
 from .base import Container
 from .basecontainer import BaseContainer
+from .dictconfig import DictConfig
 from .errors import ValidationError
 from .grammar_parser import parse
 from .listconfig import ListConfig
+from .nodes import AnyNode
 from .omegaconf import OmegaConf
 
 
@@ -42,6 +44,7 @@ def dict_keys(
         in_dict, root=_root_, resolver_name="oc.dict.keys"
     )
     assert isinstance(_parent_, BaseContainer)
+
     ret = OmegaConf.create(list(in_dict.keys()), parent=_parent_)
     assert isinstance(ret, ListConfig)
     return ret
@@ -53,6 +56,14 @@ def dict_values(
     in_dict = _get_and_validate_dict_input(
         in_dict, root=_root_, resolver_name="oc.dict.values"
     )
+
+    if isinstance(in_dict, DictConfig):
+        ret = OmegaConf.create([], parent=_parent_)
+        for node in in_dict._content.values():
+            node_key = node._get_full_key(None)
+            ret.append(AnyNode(f"${{{node_key}}}"))
+        return ret
+
     assert isinstance(_parent_, BaseContainer)
     ret = OmegaConf.create(list(in_dict.values()), parent=_parent_)
     assert isinstance(ret, ListConfig)
