@@ -7,6 +7,7 @@ from typing import Any, Mapping, Optional, Union
 from ._utils import _DEFAULT_MARKER_, _get_value, decode_primitive
 from .base import Container
 from .basecontainer import BaseContainer
+from .dictconfig import DictConfig
 from .errors import ValidationError
 from .grammar_parser import parse
 from .listconfig import ListConfig
@@ -54,7 +55,15 @@ def dict_values(
         in_dict, root=_root_, resolver_name="oc.dict.values"
     )
     assert isinstance(_parent_, BaseContainer)
-    ret = OmegaConf.create(list(in_dict.values()), parent=_parent_)
+    if isinstance(in_dict, DictConfig):
+        # values = [v for _, v in in_dict.items_ex(resolve=False)]
+        ret = OmegaConf.create(list(in_dict._content.values()), parent=_parent_)
+        for node in ret._content:
+            node._set_parent(in_dict)
+        return ret
+    else:
+        values = list(in_dict.values())
+    ret = OmegaConf.create(values, parent=_parent_)
     assert isinstance(ret, ListConfig)
     return ret
 
