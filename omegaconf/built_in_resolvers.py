@@ -2,15 +2,21 @@ import os
 import warnings
 
 # from collections.abc import Mapping, MutableMapping
-from typing import Any, Mapping, Optional, Union
+from typing import Any, List, Mapping, Optional, Union
 
-from ._utils import _DEFAULT_MARKER_, _get_value, decode_primitive
+from ._utils import _DEFAULT_MARKER_, Marker, _get_value, decode_primitive
 from .base import Container
 from .basecontainer import BaseContainer
-from .errors import ValidationError
+from .dictconfig import DictConfig
+from .errors import ConfigKeyError, ValidationError
 from .grammar_parser import parse
 from .listconfig import ListConfig
+from .nodes import AnyNode
 from .omegaconf import OmegaConf
+
+# Special marker use as default value when calling `OmegaConf.select()`. It must be
+# different from `_DEFAULT_MARKER_`, which is used by `OmegaConf.select()`.
+_DEFAULT_SELECT_MARKER_: Any = Marker("_DEFAULT_SELECT_MARKER_")
 
 
 def decode(expr: Optional[str], _parent_: Container) -> Any:
@@ -42,6 +48,7 @@ def dict_keys(
         in_dict, root=_root_, resolver_name="oc.dict.keys"
     )
     assert isinstance(_parent_, BaseContainer)
+
     ret = OmegaConf.create(list(in_dict.keys()), parent=_parent_)
     assert isinstance(ret, ListConfig)
     return ret
@@ -53,6 +60,54 @@ def dict_values(
     in_dict = _get_and_validate_dict_input(
         in_dict, root=_root_, resolver_name="oc.dict.values"
     )
+
+    if isinstance(in_dict, DictConfig):
+        # DictConfig objects are handled in a special way: the goal is to make the
+        # returned ListConfig point to the DictConfig nodes through interpolations.
+
+        dict_key: Optional[str] = None
+        if in_dict._get_root() is _root_:
+            # Try to obtain the full key through which we can access `in_dict`.
+            dict_key = in_dict._get_full_key(None)
+            if not dict_key:
+                # This can happen e.g. if `in_dict` is a transient node.
+                dict_key = None
+
+        ret = ListConfig([])
+        content = in_dict._content
+        assert isinstance(content, dict)
+
+        for key, node in content.items():
+
+            node_key: Optional[str]
+            if in_dict is _root_:
+                # Handle the special case where we are extracting values from
+                # the root config.
+                node_key = str(key)
+            elif dict_key is None:
+                # No path in the existing config => wrap the node.
+                node_key = None
+            else:
+                node_key = f"{dict_key}.{key}"
+
+            ref_node = AnyNode(f"${{{node_key}}}")
+
+            if node_key is None:
+                # We must wrap the node since no interpolation can point to it.
+                # This will override the dummy "${None}" interpolation we just set.
+                ref_node._wrap(node)
+
+            ret.append(ref_node)
+
+        # Finalize result by setting proper type and parent.
+        element_type: Any = in_dict._metadata.element_type
+        ret._metadata.element_type = element_type
+        ret._metadata.ref_type = List[element_type]
+        ret._set_parent(_parent_)
+
+        return ret
+
+    # Other dict-like object: simply create a ListConfig from its values.
     assert isinstance(_parent_, BaseContainer)
     ret = OmegaConf.create(list(in_dict.values()), parent=_parent_)
     assert isinstance(ret, ListConfig)
@@ -101,7 +156,12 @@ def _get_and_validate_dict_input(
 ) -> Mapping[Any, Any]:
     if isinstance(in_dict, str):
         # Path to an existing key in the config: use `select()`.
-        in_dict = OmegaConf.select(root, in_dict, throw_on_missing=True)
+        key = in_dict
+        in_dict = OmegaConf.select(
+            root, in_dict, throw_on_missing=True, default=_DEFAULT_SELECT_MARKER_
+        )
+        if in_dict is _DEFAULT_SELECT_MARKER_:
+            raise ConfigKeyError(f"Key not found: '{key}'")
 
     if not isinstance(in_dict, Mapping):
         raise TypeError(
