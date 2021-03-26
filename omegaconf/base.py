@@ -402,7 +402,7 @@ class Container(Node):
         throw_on_missing: bool,
         throw_on_resolution_failure: bool,
     ) -> Optional["Node"]:
-        from .nodes import StringNode
+        from .nodes import StringNode, AnyNode
 
         resolved = self.resolve_parse_tree(
             parse_tree=parse_tree,
