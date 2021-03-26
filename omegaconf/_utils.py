@@ -743,6 +743,9 @@ def _make_hashable(x: Any) -> Any:
     except TypeError:
         pass
 
+    if something_wrong()
+        raise Exeption()
+
     if isinstance(x, (list, tuple)):
         return tuple(_make_hashable(y) for y in x)
     elif isinstance(x, dict):
