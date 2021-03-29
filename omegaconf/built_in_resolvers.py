@@ -79,24 +79,21 @@ def dict_values(
 
         for key, node in content.items():
 
-            node_key: Optional[str]
             if in_dict is _root_:
                 # Handle the special case where we are extracting values from
                 # the root config.
                 node_key = str(key)
             elif dict_key is None:
-                # No path in the existing config => wrap the node.
-                node_key = None
+                # No path in the existing config.
+                raise NotImplementedError(
+                    "`oc.dict.values` currently only supports input config nodes that "
+                    "are accessible through the root config. See "
+                    "https://github.com/omry/omegaconf/issues/650 for details."
+                )
             else:
                 node_key = f"{dict_key}.{key}"
 
             ref_node = AnyNode(f"${{{node_key}}}")
-
-            if node_key is None:
-                # We must wrap the node since no interpolation can point to it.
-                # This will override the dummy "${None}" interpolation we just set.
-                ref_node._wrap(node)
-
             ret.append(ref_node)
 
         # Finalize result by setting proper type and parent.
