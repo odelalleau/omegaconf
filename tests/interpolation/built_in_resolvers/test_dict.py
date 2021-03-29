@@ -213,26 +213,23 @@ def test_dict_values_with_missing_value() -> None:
 @mark.parametrize(
     ("make_resolver", "key", "expected"),
     [
-        param(lambda: OmegaConf.create({"x": 1}), 0, 1, id="basic"),
-        param(lambda: OmegaConf.create({"x": "${y}", "y": 1}), 0, 1, id="inter_abs"),
-        param(lambda: OmegaConf.create({"x": "${.y}", "y": 1}), 0, 1, id="inter_rel"),
         param(
             lambda _parent_: OmegaConf.create({"x": 1}, parent=_parent_),
             0,
             1,
-            id="basic_with_parent",
+            id="basic",
         ),
         param(
             lambda _parent_: OmegaConf.create({"x": "${y}", "y": 1}, parent=_parent_),
             0,
             999,  # now referring to the `y` node from the global config
-            id="inter_abs_with_parent",
+            id="inter_abs",
         ),
         param(
             lambda _parent_: OmegaConf.create({"x": "${.y}", "y": 1}, parent=_parent_),
             0,
             1,
-            id="inter_rel_with_parent",
+            id="inter_rel",
         ),
     ],
 )
@@ -248,8 +245,38 @@ def test_dict_values_dictconfig_resolver_output(
             "y": 999,
         }
     )
-    assert cfg.foo[key] == expected
+
+    # Directly using the resolver output without an intermediate node to store the
+    # result is not currently supported.
+    with raises(InterpolationResolutionError, match=re.escape("NotImplementedError2")):
+        cfg.foo
+
     assert cfg.bar[key] == expected
+
+
+@mark.parametrize(
+    ("make_resolver", "key", "expected"),
+    [
+        param(lambda: OmegaConf.create({"x": 1}), 0, 1, id="basic"),
+        param(lambda: OmegaConf.create({"x": "${y}", "y": 1}), 0, 1, id="inter_abs"),
+        param(lambda: OmegaConf.create({"x": "${.y}", "y": 1}), 0, 1, id="inter_rel"),
+    ],
+)
+def test_dict_values_dictconfig_resolver_output_no_parent(
+    restore_resolvers: Any, make_resolver: Any, key: Any, expected: Any
+) -> None:
+    OmegaConf.register_new_resolver("make", make_resolver)
+    cfg = OmegaConf.create(
+        {
+            "bar": "${oc.dict.values:${boz}}",
+            "boz": "${make:}",
+            "y": 999,
+        }
+    )
+
+    # Using transient nodes whose parent is not set is not currently supported.
+    with raises(InterpolationResolutionError, match=re.escape("NotImplementedError")):
+        cfg.bar
 
 
 @mark.parametrize(
@@ -260,12 +287,6 @@ def test_dict_values_dictconfig_resolver_output(
             [0, 1],
             ["${y.a}", "${y.b}"],
             id="dictconfig_with_parent",
-        ),
-        param(
-            lambda: OmegaConf.create({"a": 0, "b": 1}),
-            [0, 1],
-            ["${__WRAPPED__}", "${__WRAPPED__}"],
-            id="dictconfig_no_parent",
         ),
         param(
             lambda: {"a": 0, "b": 1},

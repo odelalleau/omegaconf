@@ -88,7 +88,6 @@ class Node(ABC):
         self.__dict__["_metadata"] = metadata
         self.__dict__["_parent"] = parent
         self.__dict__["_flags_cache"] = None
-        self.__dict__["_wrapped"] = None
 
     def __getstate__(self) -> Dict[str, Any]:
         # Overridden to ensure that the flags cache is cleared on serialization.
@@ -290,10 +289,6 @@ class Node(ABC):
             self._metadata.flags_root = flags_root
             self._invalidate_flags_cache()
 
-    def _wrap(self, node: "Node") -> None:
-        self._wrapped = node
-        self._set_value("${__WRAPPED__}")
-
 
 class Container(Node):
     """
@@ -455,11 +450,6 @@ class Container(Node):
             node that is created to wrap the interpolated value. It is `None` if and only if
             `throw_on_resolution_failure` is `False` and an error occurs during resolution.
         """
-
-        if value._wrapped is not None:
-            return value._wrapped._dereference_node(
-                throw_on_resolution_failure=throw_on_resolution_failure
-            )
 
         try:
             resolved = self.resolve_parse_tree(
