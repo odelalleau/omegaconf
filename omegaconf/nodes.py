@@ -408,7 +408,7 @@ class StringInterpolationResultNode(ValueNode):
             parent=parent,
             value=value,
             metadata=Metadata(
-                ref_type=str, object_type=str, key=key, optional=False, flags=flags
+                ref_type=Any, object_type=None, key=key, optional=True, flags=flags
             ),
         )
         # In general we should not try to write into interpolation results.
@@ -420,11 +420,7 @@ class StringInterpolationResultNode(ValueNode):
             raise ReadonlyConfigError("Cannot set value of read-only config node")
         self._val = self.validate_and_convert(value)
 
-    def _validate_and_convert_impl(self, value: Any) -> str:
-        if not isinstance(value, str):
-            raise ValidationError(
-                "Interpolation result `$VALUE` of type '$VALUE_TYPE' is not a string"
-            )
+    def _validate_and_convert_impl(self, value: Any) -> Any:
         return value
 
     def __deepcopy__(self, memo: Dict[int, Any]) -> "StringInterpolationResultNode":
