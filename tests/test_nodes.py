@@ -654,9 +654,3 @@ def test_string_interpolation_result_flags(flags: Any) -> None:
     # Check that the readonly flag is set unless provided as input.
     if readonly is None:
         assert node._get_node_flag("readonly")
-
-
-@mark.parametrize("value", [None, 1, 1.0, True, False, Color.RED, {}, []])
-def test_string_interpolation_result_invalid_value(value: Any) -> None:
-    with raises(ValidationError):
-        StringInterpolationResultNode(value)

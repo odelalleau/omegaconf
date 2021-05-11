@@ -553,8 +553,7 @@ class Container(Node):
         throw_on_resolution_failure: bool,
     ) -> Optional["Node"]:
         from .basecontainer import BaseContainer
-        from .nodes import AnyNode, StringInterpolationResultNode
-        from .omegaconf import _node_wrap
+        from .nodes import StringInterpolationResultNode, ValueNode
 
         assert parent is None or isinstance(parent, BaseContainer)
 
@@ -568,28 +567,13 @@ class Container(Node):
             # so as to ensure that it cannot be considered itself as an interpolation,
             # e.g., when `resolved` would be a string like "${foo}".
             target_type = value._metadata.ref_type
-            if isinstance(resolved, str) and target_type in [None, Any, str]:
-                wrapped: Node = StringInterpolationResultNode(
-                    value=resolved, key=key, parent=parent
-                )
-            else:
-                wrapped = _node_wrap(
-                    type_=target_type,
-                    parent=parent,
-                    is_optional=value._metadata.optional,
-                    value=resolved,
-                    key=key,
-                    ref_type=target_type,
-                )
-        else:
-            # Other objects get wrapped into an `AnyNode` with `allow_objects` set
-            # to True.
-            wrapped = AnyNode(
-                value=resolved, key=key, parent=None, flags={"allow_objects": True}
-            )
-            wrapped._set_parent(parent)
+            if not isinstance(resolved, str) or target_type not in [None, Any, str]:
+                if isinstance(value, ValueNode):
+                    resolved = value.validate_and_convert(resolved)
+                else:
+                    raise ValidationError("bla bla")
 
-        return wrapped
+        return StringInterpolationResultNode(value=resolved, key=key, parent=parent)
 
     def _validate_not_dereferencing_to_parent(self, node: Node, target: Node) -> None:
         parent: Optional[Node] = node
